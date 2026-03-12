@@ -13,7 +13,7 @@ print("MEBOST — Pre-deploy migration")
 print("=" * 50)
 
 # Validate env vars bắt buộc trước khi migrate
-required = ["OPENROUTER_API_KEY", "SECRET_KEY"]
+required = ["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", "11122233344455566677788899911122"]
 missing  = [k for k in required if not os.environ.get(k)]
 if missing:
     print(f"[FATAL] Missing env vars: {', '.join(missing)}")

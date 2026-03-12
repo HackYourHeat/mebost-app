@@ -9,4 +9,5 @@ gunicorn==22.0.0
 whitenoise==6.7.0
 
 # ── PostgreSQL (Railway Postgres plugin) ──────────────
-psycopg2-binary==2.9.9
+# Bỏ comment dòng dưới KHI và CHỈ KHI bạn add PostgreSQL plugin trong Railway:
+# psycopg2-binary==2.9.9

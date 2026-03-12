@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Mebost — Hải Đăng</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=Crimson+Pro:wght@300;400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --fog: #f0ebe3;
+      --warm: #b8956a;
+      --ember: #c4714a;
+      --ocean: #1e3a4a;
+      --mist: #7a9aab;
+      --candle: #f5c842;
+      --line: rgba(122,154,171,0.16);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Crimson Pro', Georgia, serif;
+      background: var(--ocean);
+      color: var(--fog);
+      min-height: 100vh;
+      overflow: hidden;
+      position: relative;
+      overscroll-behavior: none;
+    }
+
+    /* ── Background ── */
+    .ocean-bg {
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse 120% 60% at 50% 100%, #0d2233 0%, transparent 70%),
+        radial-gradient(ellipse 80% 40% at 30% 80%, #162d3f 0%, transparent 60%),
+        linear-gradient(180deg, #0a1a28 0%, #1e3a4a 40%, #162d3f 70%, #0d2233 100%);
+      z-index: 0;
+    }
+
+    .stars { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
+
+    .star {
+      position: absolute;
+      background: white;
+      border-radius: 50%;
+      animation: twinkle var(--d, 3s) ease-in-out infinite;
+      animation-delay: var(--delay, 0s);
+      opacity: var(--op, 0.6);
+    }
+
+    @keyframes twinkle {
+      0%,100% { opacity: var(--op, 0.6); transform: scale(1); }
+      50% { opacity: calc(var(--op, 0.6) * 0.3); transform: scale(0.8); }
+    }
+
+    /* ── Waves ── */
+    .waves {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: 120px; z-index: 2; pointer-events: none; overflow: hidden;
+    }
+
+    .wave {
+      position: absolute; bottom: 0; left: -50%; width: 200%;
+      height: 80px;
+      border-radius: 50% 50% 0 0;
+      opacity: 0.08;
+      animation: waveMove var(--spd, 8s) ease-in-out infinite;
+    }
+
+    .wave:nth-child(1) { background: #7ab8cc; --spd: 7s; bottom: 10px; }
+    .wave:nth-child(2) { background: #5a98b0; --spd: 10s; bottom: 0; opacity: 0.05; animation-direction: reverse; }
+    .wave:nth-child(3) { background: #4a8aa0; --spd: 13s; bottom: 5px; opacity: 0.04; }
+
+    @keyframes waveMove {
+      0%,100% { transform: translateX(0) scaleY(1); }
+      50% { transform: translateX(5%) scaleY(1.1); }
+    }
+
+    /* ── Lighthouse decoration ── */
+    .lighthouse-wrap {
+      position: fixed; bottom: 60px; right: 80px;
+      z-index: 3; pointer-events: none;
+      animation: floatLH 6s ease-in-out infinite;
+    }
+
+    @keyframes floatLH {
+      0%,100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+
+    .lighthouse { width: 56px; filter: drop-shadow(0 0 20px rgba(245,200,66,0.4)); }
+
+    .glow-ring {
+      position: fixed; bottom: 100px; right: 62px;
+      width: 90px; height: 90px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(245,200,66,0.15) 0%, transparent 70%);
+      z-index: 2;
+      animation: glowPulse 3s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    @keyframes glowPulse {
+      0%,100% { transform: scale(1); opacity: 0.8; }
+      50% { transform: scale(1.4); opacity: 0.3; }
+    }
+
+    /* ── App shell ── */
+    .app {
+      position: relative; z-index: 10;
+      display: flex; flex-direction: column;
+      height: 100vh; max-width: 720px;
+      margin: 0 auto; padding: 0 18px;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 20px 0 14px;
+      display: flex; align-items: center; gap: 14px;
+      border-bottom: 1px solid rgba(122,154,171,0.12);
+    }
+
+    .lh-icon {
+      font-size: 28px;
+      filter: drop-shadow(0 0 8px rgba(245,200,66,0.6));
+      animation: iconGlow 3s ease-in-out infinite;
+    }
+
+    @keyframes iconGlow {
+      0%,100% { filter: drop-shadow(0 0 8px rgba(245,200,66,0.6)); }
+      50% { filter: drop-shadow(0 0 18px rgba(245,200,66,0.9)); }
+    }
+
+    .header-text h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.45rem; font-weight: 300;
+      letter-spacing: 0.12em; color: var(--fog);
+    }
+
+    .header-text p {
+      font-size: 0.78rem; color: var(--mist);
+      letter-spacing: 0.06em; font-style: italic; margin-top: 2px;
+    }
+
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+    .status-dot { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(--mist); letter-spacing: 0.05em; }
+
+    .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #5dcb89;
+      animation: dotPulse 2s ease-in-out infinite;
+      box-shadow: 0 0 8px #5dcb89;
+    }
+
+    @keyframes dotPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    .menu-btn, .sound-btn {
+      background: rgba(30,58,74,0.62);
+      border: 1px solid rgba(122,154,171,0.16);
+      color: var(--mist);
+      cursor: pointer; border-radius: 18px;
+      padding: 8px 10px;
+      font-family: 'Crimson Pro', serif; font-size: 0.76rem;
+      backdrop-filter: blur(6px);
+    }
+
+    /* ── Info strip ── */
+    .top-strip { padding: 12px 0 10px; display: flex; flex-direction: column; gap: 10px; }
+
+    .mini-card {
+      background: rgba(122,154,171,0.07);
+      border: 1px solid rgba(122,154,171,0.12);
+      border-radius: 14px; padding: 10px 12px;
+    }
+
+    .mini-label { font-size: 0.68rem; color: var(--mist); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+
+    .mini-text { font-size: 0.9rem; line-height: 1.5; color: rgba(240,235,227,0.92); white-space: pre-wrap; word-break: break-word; }
+
+    /* ── Emotion diary strip ── */
+    .diary-strip {
+      padding: 12px 0;
+      border-top: 1px solid rgba(122,154,171,0.08);
+      border-bottom: 1px solid rgba(122,154,171,0.08);
+      margin-bottom: 8px;
+    }
+
+    .diary-label { font-size: 0.68rem; color: var(--mist); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px; font-family: 'Cormorant Garamond', serif; }
+
+    .diary-entries { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; }
+    .diary-entries::-webkit-scrollbar { display: none; }
+
+    .diary-entry {
+      flex-shrink: 0;
+      background: rgba(122,154,171,0.08);
+      border: 1px solid rgba(122,154,171,0.14);
+      border-radius: 10px; padding: 10px 14px; min-width: 150px;
+      transition: all 0.2s; cursor: default;
+    }
+
+    .diary-entry .mood-icon { font-size: 18px; margin-bottom: 4px; }
+    .diary-entry .mood-date { font-size: 0.6rem; color: var(--mist); letter-spacing: 0.06em; }
+    .diary-entry .mood-note { font-size: 0.76rem; color: rgba(240,235,227,0.7); font-style: italic; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+
+    /* ── Chat ── */
+    .chat-area {
+      flex: 1; overflow-y: auto;
+      padding: 16px 0 10px;
+      display: flex; flex-direction: column; gap: 18px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(122,154,171,0.2) transparent;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .chat-area::-webkit-scrollbar { width: 4px; }
+    .chat-area::-webkit-scrollbar-track { background: transparent; }
+    .chat-area::-webkit-scrollbar-thumb { background: rgba(122,154,171,0.2); border-radius: 2px; }
+
+    .msg {
+      display: flex; gap: 12px; align-items: flex-end;
+      animation: msgIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    .msg.user { flex-direction: row-reverse; }
+
+    @keyframes msgIn {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+      background: rgba(122,154,171,0.12);
+      border: 1px solid rgba(122,154,171,0.2);
+    }
+
+    .msg.user .avatar { background: rgba(196,113,74,0.15); border-color: rgba(196,113,74,0.25); }
+
+    .bubble-wrap { display: flex; flex-direction: column; gap: 6px; }
+
+    .bubble {
+      max-width: 78%; padding: 13px 18px; border-radius: 18px;
+      font-size: 0.94rem; line-height: 1.7; letter-spacing: 0.01em;
+      white-space: pre-wrap; word-break: break-word;
+    }
+
+    .msg.ai .bubble {
+      background: rgba(30,58,74,0.72);
+      border: 1px solid rgba(122,154,171,0.18);
+      border-bottom-left-radius: 4px;
+      color: rgba(240,235,227,0.92);
+      backdrop-filter: blur(8px);
+    }
+
+    .msg.user .bubble {
+      background: rgba(196,113,74,0.2);
+      border: 1px solid rgba(196,113,74,0.25);
+      border-bottom-right-radius: 4px;
+      color: rgba(240,235,227,0.88);
+      text-align: right;
+    }
+
+    .msg-time { font-size: 0.68rem; color: rgba(122,154,171,0.55); letter-spacing: 0.04em; text-align: right; }
+    .msg.ai .msg-time { text-align: left; }
+
+    .msg-actions { display: flex; gap: 8px; }
+
+    .forget-btn {
+      background: transparent;
+      border: 1px solid rgba(122,154,171,0.18);
+      color: var(--mist); border-radius: 999px;
+      padding: 5px 10px; font-size: 0.76rem;
+      cursor: pointer; width: fit-content;
+      font-family: 'Crimson Pro', serif;
+    }
+
+    /* ── Typing indicator ── */
+    .typing-dots { display: flex; gap: 5px; padding: 6px 2px; }
+
+    .typing-dots span {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--mist); opacity: 0.5;
+      animation: typingDot 1.2s ease-in-out infinite;
+    }
+
+    .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes typingDot {
+      0%,60%,100% { transform: translateY(0); opacity: 0.5; }
+      30% { transform: translateY(-5px); opacity: 1; }
+    }
+
+    /* ── Input area ── */
+    .key-hint { font-size: 0.66rem; color: rgba(122,154,171,0.38); text-align: center; padding: 0 0 4px; letter-spacing: 0.06em; }
+
+    .input-area { padding: 14px 0 24px; display: flex; gap: 12px; align-items: flex-end; }
+
+    .input-wrap { flex: 1; position: relative; }
+
+    textarea {
+      width: 100%;
+      background: rgba(30,58,74,0.5);
+      border: 1px solid rgba(122,154,171,0.2);
+      border-radius: 16px; color: var(--fog);
+      font-family: 'Crimson Pro', serif; font-size: 0.94rem; line-height: 1.6;
+      padding: 13px 18px; resize: none; outline: none;
+      min-height: 52px; max-height: 240px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      backdrop-filter: blur(6px);
+    }
+
+    textarea::placeholder { color: rgba(122,154,171,0.4); font-style: italic; }
+
+    textarea:focus {
+      border-color: rgba(245,200,66,0.35);
+      box-shadow: 0 0 0 3px rgba(245,200,66,0.08), 0 0 20px rgba(245,200,66,0.06);
+    }
+
+    .send-btn {
+      width: 50px; height: 50px; border-radius: 50%;
+      background: linear-gradient(135deg, rgba(196,113,74,0.85), rgba(245,200,66,0.65));
+      border: 1px solid rgba(245,200,66,0.3);
+      color: #fff; cursor: pointer; font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s; flex-shrink: 0; backdrop-filter: blur(6px);
+    }
+
+    .send-btn:disabled { opacity: 0.45; cursor: default; }
+
+    #scroll-anchor { height: 1px; }
+
+    .cursor {
+      display: inline-block; width: 1px; height: 1em;
+      background: var(--mist); margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: blink 0.8s ease-in-out infinite;
+    }
+
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* ── Overlays ── */
+    .overlay {
+      position: fixed; inset: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: center;
+      padding: 18px;
+      background: rgba(6,14,22,0.45);
+      backdrop-filter: blur(8px);
+    }
+
+    .modal {
+      width: 100%; max-width: 520px;
+      background: rgba(20,34,48,0.78);
+      border: 1px solid rgba(122,154,171,0.18);
+      border-radius: 24px; padding: 26px 22px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+      backdrop-filter: blur(12px);
+    }
+
+    .modal h2 {
+      font-family: 'Cormorant Garamond', serif;
+      letter-spacing: 0.16em; font-weight: 400;
+      font-size: 1.9rem; text-align: center; color: var(--fog);
+    }
+
+    .modal p { margin-top: 10px; color: var(--mist); line-height: 1.75; text-align: center; font-size: 0.98rem; }
+
+    .modal input {
+      width: 100%; margin-top: 16px;
+      background: rgba(30,58,74,0.5);
+      border: 1px solid rgba(122,154,171,0.2);
+      border-radius: 16px; color: var(--fog);
+      font-family: 'Crimson Pro', serif; font-size: 1rem; line-height: 1.6;
+      padding: 14px 18px; outline: none;
+    }
+
+    .modal input::placeholder { color: rgba(122,154,171,0.45); }
+
+    .modal .error { min-height: 22px; margin-top: 12px; color: #ffd7c7; text-align: center; font-size: 0.9rem; }
+
+    .modal .actions { margin-top: 12px; }
+
+    .primary-btn {
+      width: 100%; height: 52px; border-radius: 16px;
+      border: 1px solid rgba(245,200,66,0.3);
+      background: linear-gradient(135deg, rgba(196,113,74,0.85), rgba(245,200,66,0.65));
+      color: #fff; font-family: 'Crimson Pro', serif; font-size: 1rem; cursor: pointer;
+    }
+
+    /* ── Menu sheet ── */
+    .sheet {
+      position: fixed; left: 12px; right: 12px; bottom: 12px;
+      z-index: 40;
+      background: rgba(20,34,48,0.9);
+      border: 1px solid rgba(122,154,171,0.16);
+      border-radius: 20px; padding: 14px;
+      backdrop-filter: blur(12px);
+      display: none;
+    }
+
+    .sheet.open { display: block; }
+
+    .sheet-title { font-size: 0.72rem; color: var(--mist); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
+
+    .sheet-row { display: flex; flex-direction: column; gap: 10px; }
+
+    .sheet-btn {
+      width: 100%;
+      background: rgba(122,154,171,0.08);
+      border: 1px solid rgba(122,154,171,0.14);
+      color: var(--fog); border-radius: 14px;
+      padding: 12px 14px; font-size: 0.96rem;
+      cursor: pointer; font-family: 'Crimson Pro', serif; text-align: left;
+    }
+
+    .switch-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      background: rgba(122,154,171,0.08);
+      border: 1px solid rgba(122,154,171,0.14);
+      border-radius: 14px; padding: 12px 14px;
+    }
+
+    .switch {
+      position: relative; width: 52px; height: 30px;
+      background: rgba(122,154,171,0.3);
+      border-radius: 30px; cursor: pointer; flex-shrink: 0;
+    }
+
+    .switch::after {
+      content: ""; position: absolute; top: 3px; left: 3px;
+      width: 24px; height: 24px; background: #fff; border-radius: 50%; transition: .22s;
+    }
+
+    .switch.active { background: rgba(93,203,137,0.8); }
+    .switch.active::after { left: 25px; }
+
+    .hidden { display: none !important; }
+
+    /* ── Mobile ── */
+    @media (max-width: 768px) {
+      .app { padding: 0 14px; }
+      .lighthouse-wrap, .glow-ring { display: none; }
+      .bubble { max-width: 84%; }
+      .header-text h1 { font-size: 1.3rem; }
+      .header-text p { font-size: 0.74rem; }
+      .status-dot { display: none; }
+      .top-strip { padding-top: 10px; }
+      .mini-card { padding: 9px 11px; }
+      .diary-entry { min-width: 138px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ocean-bg"></div>
+  <div class="stars" id="stars"></div>
+
+  <div class="waves">
+    <div class="wave"></div>
+    <div class="wave"></div>
+    <div class="wave"></div>
+  </div>
+
+  <div class="glow-ring"></div>
+
+  <div class="lighthouse-wrap">
+    <svg class="lighthouse" viewBox="0 0 56 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M28 22 L2 60 L28 60 Z" fill="rgba(245,200,66,0.06)"/>
+      <path d="M28 22 L54 60 L28 60 Z" fill="rgba(245,200,66,0.04)"/>
+      <rect x="20" y="28" width="16" height="52" rx="2" fill="#1e3a4a"/>
+      <rect x="21" y="28" width="14" height="52" rx="2" fill="#243f52"/>
+      <rect x="20" y="35" width="16" height="6" rx="1" fill="#1a3244" opacity="0.8"/>
+      <rect x="20" y="50" width="16" height="6" rx="1" fill="#1a3244" opacity="0.8"/>
+      <rect x="20" y="65" width="16" height="6" rx="1" fill="#1a3244" opacity="0.8"/>
+      <rect x="24" y="68" width="8" height="12" rx="4" fill="#162d3f"/>
+      <rect x="17" y="24" width="22" height="5" rx="2" fill="#2c4f64"/>
+      <rect x="20" y="12" width="16" height="13" rx="3" fill="#2c4f64"/>
+      <ellipse cx="28" cy="18" rx="5" ry="5" fill="rgba(245,200,66,0.9)">
+        <animate attributeName="opacity" values="0.7;1;0.7" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="rx" values="4.5;5.5;4.5" dur="2s" repeatCount="indefinite"/>
+      </ellipse>
+      <path d="M19 12 L28 4 L37 12 Z" fill="#3a6a84"/>
+      <rect x="15" y="78" width="26" height="6" rx="3" fill="#162d3f"/>
+      <ellipse cx="28" cy="86" rx="18" ry="5" fill="#0d2233" opacity="0.6"/>
+      <ellipse cx="28" cy="84" rx="14" ry="3" fill="#1a3244"/>
+    </svg>
+  </div>
+
+  <audio id="oceanSound" loop>
+    <source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_3cde5d5b21.mp3?filename=ocean-waves-112906.mp3" type="audio/mpeg">
+  </audio>
+
+  <!-- Language overlay -->
+  <div class="overlay" id="languageOverlay">
+    <div class="modal">
+      <h2>HẢI ĐĂNG</h2>
+      <p id="languageCopy">
+        Trước khi mình bắt đầu,<br>
+        bạn muốn Hải Đăng trò chuyện với bạn bằng ngôn ngữ nào?<br><br>
+        Before we begin,<br>
+        what language would you like Hải Đăng to speak with you in?
+      </p>
+      <input id="languageInput" placeholder="Nhập ngôn ngữ của bạn… / Type your language…" />
+      <div class="error" id="languageError"></div>
+      <div class="actions">
+        <button class="primary-btn" id="languageBtn">Bắt đầu / Begin</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Menu sheet -->
+  <div class="sheet" id="menuSheet">
+    <div class="sheet-title" id="menuTitle">Tùy chọn</div>
+    <div class="sheet-row">
+      <button class="sheet-btn" id="newSessionBtn">+ Phiên mới</button>
+      <div class="switch-row">
+        <div>
+          <div id="memoryToggleTitle">Cho phép Hải Đăng ghi nhớ</div>
+          <div style="font-size:0.8rem;color:var(--mist);margin-top:2px" id="memoryToggleMeta">Bật để tạo continuity</div>
+        </div>
+        <div class="switch active" id="memorySwitch"></div>
+      </div>
+      <button class="sheet-btn" id="clearMemoryBtn">🌊 Xóa ký ức của Hải Đăng</button>
+      <button class="sheet-btn" id="closeMenuBtn">Đóng</button>
+    </div>
+  </div>
+
+  <!-- Main app -->
+  <div class="app">
+    <header>
+      <div class="lh-icon">🏮</div>
+      <div class="header-text">
+        <h1>MEBOST</h1>
+        <p id="subtitleText">Hải Đăng — người bạn lặng lẽ bên cảm xúc của bạn</p>
+      </div>
+      <div class="header-right">
+        <div class="status-dot">
+          <div class="dot"></div>
+          <span id="statusText">đang lắng nghe</span>
+        </div>
+        <button class="sound-btn" id="soundBtn">🔇</button>
+        <button class="menu-btn" id="menuBtn">☰</button>
+      </div>
+    </header>
+
+    <div class="top-strip">
+      <div class="mini-card">
+        <div class="mini-label" id="profileLabel">Hồ sơ</div>
+        <div class="mini-text" id="profileText">...</div>
+      </div>
+      <div class="mini-card">
+        <div class="mini-label" id="memoryLabel">Ký ức gần đây</div>
+        <div class="mini-text" id="memoryHint">Chưa có ký ức nào rõ ràng.</div>
+      </div>
+    </div>
+
+    <div class="diary-strip">
+      <div class="diary-label" id="recentLabel">Dấu cảm xúc gần đây</div>
+      <div class="diary-entries" id="recentItems"></div>
+    </div>
+
+    <div class="chat-area" id="chatArea">
+      <div id="scroll-anchor"></div>
+    </div>
+
+    <div class="key-hint" id="keyHint">Enter để gửi · Shift+Enter xuống dòng</div>
+
+    <div class="input-area">
+      <div class="input-wrap">
+        <textarea id="msgInput" rows="1" placeholder="Kể cho Hải Đăng nghe đi…"></textarea>
+      </div>
+      <button class="send-btn" id="sendBtn">➤</button>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════════════
+    // TEXT DICTIONARY
+    // ═══════════════════════════════════════════════
+    const TEXT = {
+      vi: {
+        subtitle: "Hải Đăng — người bạn lặng lẽ bên cảm xúc của bạn",
+        status: "đang lắng nghe",
+        keyHint: "Enter để gửi · Shift+Enter xuống dòng",
+        placeholder: "Kể cho Hải Đăng nghe đi…",
+        namePlaceholder: "Kể tên bạn cho Hải Đăng nghe…",
+        profileLabel: "Hồ sơ",
+        memoryLabel: "Ký ức gần đây",
+        recentLabel: "Dấu cảm xúc gần đây",
+        memoryHintEmpty: "Chưa có ký ức nào rõ ràng.",
+        recentEmpty: "Chưa có dữ liệu cảm xúc.",
+        menuTitle: "Tùy chọn",
+        newSession: "+ Phiên mới",
+        memoryToggleTitle: "Cho phép Hải Đăng ghi nhớ",
+        memoryToggleMeta: "Bật để tạo continuity",
+        clearMemory: "🌊 Xóa ký ức của Hải Đăng",
+        closeMenu: "Đóng",
+        soundOff: "🔇",
+        soundOn: "🌊",
+        forget: "🌿 Quên điều này",
+        fallback: "Đường kết nối đang gián đoạn… Nhưng Hải Đăng vẫn ở đây. Thử lại nhé bạn.",
+        justNow: "Vừa xong",
+        forgotten: "[đã quên]",
+        askName: "Trước khi mình đi cùng nhau lâu hơn, mình có thể gọi bạn bằng tên gì?",
+        greetAfterName: (name) => `Chào ${name}. Mình rất vui vì biết tên bạn.\n\nGiờ thì hôm nay, trong lòng bạn đang có điều gì?`,
+        welcome: (name) => name
+          ? `Chào ${name}. Hải Đăng ở đây — không vội vã, không phán xét.\n\nHôm nay, trong lòng bạn đang có điều gì?`
+          : `Chào bạn. Hải Đăng ở đây — không vội vã, không phán xét.\n\nHôm nay, trong lòng bạn đang có điều gì?`,
+        profileText: (name, lang, memoryEnabled) =>
+          `${name || "Bạn"} · ${lang || "Tiếng Việt"} · ${memoryEnabled ? "đang ghi nhớ" : "không ghi nhớ"}`
+      },
+      en: {
+        subtitle: "Hải Đăng — a quiet companion for your inner world",
+        status: "listening",
+        keyHint: "Enter to send · Shift+Enter for a new line",
+        placeholder: "Tell Hải Đăng what's on your heart…",
+        namePlaceholder: "Tell Hải Đăng your name…",
+        profileLabel: "Profile",
+        memoryLabel: "Recent memory",
+        recentLabel: "Recent emotional traces",
+        memoryHintEmpty: "No clear memory yet.",
+        recentEmpty: "No emotional traces yet.",
+        menuTitle: "Options",
+        newSession: "+ New session",
+        memoryToggleTitle: "Let Hải Đăng remember",
+        memoryToggleMeta: "Turn on for continuity",
+        clearMemory: "🌊 Clear Hải Đăng's memory",
+        closeMenu: "Close",
+        soundOff: "🔇",
+        soundOn: "🌊",
+        forget: "🌿 Forget this",
+        fallback: "The connection is wavering… but Hải Đăng is still here. Try again in a moment.",
+        justNow: "Just now",
+        forgotten: "[forgotten]",
+        askName: "Before we go a little further together, what may I call you?",
+        greetAfterName: (name) => `Hello ${name}. I'm glad to know your name.\n\nNow, what is resting in your heart today?`,
+        welcome: (name) => name
+          ? `Hello ${name}. Hải Đăng is here — without hurry, without judgment.\n\nWhat is resting in your heart today?`
+          : `Hello. Hải Đăng is here — without hurry, without judgment.\n\nWhat is resting in your heart today?`,
+        profileText: (name, lang, memoryEnabled) =>
+          `${name || "You"} · ${lang || "English"} · ${memoryEnabled ? "memory on" : "memory off"}`
+      }
+    };
+
+    // ═══════════════════════════════════════════════
+    // STATE
+    // ═══════════════════════════════════════════════
+    const state = {
+      currentLanguage:  localStorage.getItem("mebost_lang") || "",
+      currentSessionId: localStorage.getItem("mebost_session_id") || "",
+      currentUserId:    localStorage.getItem("mebost_user_id") || "",
+      displayName:      localStorage.getItem("mebost_name") || "",
+      memoryEnabled:    localStorage.getItem("mebost_memory_enabled") !== "0",
+      soundOn:          false,
+      isTyping:         false,
+      awaitingName:     false
+    };
+
+    // ═══════════════════════════════════════════════
+    // HELPERS
+    // ═══════════════════════════════════════════════
+    function getUiLanguage(lang) {
+      const value = String(lang || "").toLowerCase();
+      if (value.includes("vi") || value.includes("viet") || value.includes("vietnam")) return "vi";
+      return "en";
+    }
+
+    function t() {
+      return TEXT[getUiLanguage(state.currentLanguage || "Tiếng Việt")];
+    }
+
+    function randomId(prefix) {
+      return prefix + "_" + Math.random().toString(36).slice(2, 10);
+    }
+
+    function ensureUserId() {
+      if (!state.currentUserId) {
+        state.currentUserId = randomId("u");
+        localStorage.setItem("mebost_user_id", state.currentUserId);
+      }
+      return state.currentUserId;
+    }
+
+    function createSessionId() {
+      state.currentSessionId = randomId("s");
+      localStorage.setItem("mebost_session_id", state.currentSessionId);
+      return state.currentSessionId;
+    }
+
+    function ensureSessionId() {
+      if (!state.currentSessionId) createSessionId();
+      return state.currentSessionId;
+    }
+
+    function makeDeviceHash() {
+      const raw = [
+        navigator.userAgent || "",
+        navigator.language || "",
+        screen.width || "",
+        screen.height || "",
+        Intl.DateTimeFormat().resolvedOptions().timeZone || ""
+      ].join("|");
+      let hash = 0;
+      for (let i = 0; i < raw.length; i++) {
+        hash = ((hash << 5) - hash) + raw.charCodeAt(i);
+        hash |= 0;
+      }
+      return "d_" + Math.abs(hash);
+    }
+
+    function getTime() {
+      return new Date().toLocaleTimeString(
+        getUiLanguage(state.currentLanguage) === "en" ? "en-US" : "vi-VN",
+        { hour: '2-digit', minute: '2-digit' }
+      );
+    }
+
+    function autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 240) + 'px';
+    }
+
+    function scrollBottom() {
+      document.getElementById('scroll-anchor').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // ═══════════════════════════════════════════════
+    // UI RENDERING
+    // ═══════════════════════════════════════════════
+    function applyUiTexts() {
+      const tt = t();
+      document.getElementById("subtitleText").textContent    = tt.subtitle;
+      document.getElementById("statusText").textContent      = tt.status;
+      document.getElementById("keyHint").textContent         = tt.keyHint;
+      document.getElementById("msgInput").placeholder        = state.awaitingName ? tt.namePlaceholder : tt.placeholder;
+      document.getElementById("profileLabel").textContent    = tt.profileLabel;
+      document.getElementById("memoryLabel").textContent     = tt.memoryLabel;
+      document.getElementById("recentLabel").textContent     = tt.recentLabel;
+      document.getElementById("menuTitle").textContent       = tt.menuTitle;
+      document.getElementById("newSessionBtn").textContent   = tt.newSession;
+      document.getElementById("memoryToggleTitle").textContent = tt.memoryToggleTitle;
+      document.getElementById("memoryToggleMeta").textContent  = tt.memoryToggleMeta;
+      document.getElementById("clearMemoryBtn").textContent  = tt.clearMemory;
+      document.getElementById("closeMenuBtn").textContent    = tt.closeMenu;
+      document.getElementById("soundBtn").textContent        = state.soundOn ? tt.soundOn : tt.soundOff;
+      document.getElementById("profileText").textContent     = tt.profileText(state.displayName, state.currentLanguage, state.memoryEnabled);
+
+      const memoryHint = document.getElementById("memoryHint");
+      if (!memoryHint.dataset.hasMemory) {
+        memoryHint.textContent = tt.memoryHintEmpty;
+      }
+
+      document.getElementById("memorySwitch").classList.toggle("active", state.memoryEnabled);
+    }
+
+    function appendMessage(role, text = '', metaText = '', messageId = null, deleted = false) {
+      const area   = document.getElementById('chatArea');
+      const anchor = document.getElementById('scroll-anchor');
+      const div    = document.createElement('div');
+      div.className = `msg ${role}`;
+
+      const avatar = role === 'ai' ? '🏮' : '🌿';
+      let actionsHtml = "";
+      if (role === "user" && !deleted && messageId) {
+        actionsHtml = `<div class="msg-actions"><button class="forget-btn" data-mid="${messageId}">${t().forget}</button></div>`;
+      }
+
+      div.innerHTML = `
+        <div class="avatar">${avatar}</div>
+        <div class="bubble-wrap">
+          <div class="bubble">${text}</div>
+          <div class="msg-time">${metaText || getTime()}</div>
+          ${actionsHtml}
+        </div>
+      `;
+
+      area.insertBefore(div, anchor);
+      scrollBottom();
+      return div;
+    }
+
+    function clearChatArea() {
+      document.getElementById("chatArea").innerHTML = `<div id="scroll-anchor"></div>`;
+    }
+
+    function showTyping() {
+      const area   = document.getElementById('chatArea');
+      const anchor = document.getElementById('scroll-anchor');
+      const div    = document.createElement('div');
+      div.className = 'msg ai';
+      div.id        = 'typing-indicator';
+      div.innerHTML = `
+        <div class="avatar">🏮</div>
+        <div class="bubble-wrap">
+          <div class="bubble">
+            <div class="typing-dots"><span></span><span></span><span></span></div>
+          </div>
+        </div>
+      `;
+      area.insertBefore(div, anchor);
+      scrollBottom();
+    }
+
+    function hideTyping() {
+      const el = document.getElementById('typing-indicator');
+      if (el) el.remove();
+    }
+
+    async function typewriterEffect(targetBubble, text, speed = 15) {
+      targetBubble.textContent = '';
+      const cursor = document.createElement('span');
+      cursor.className = 'cursor';
+      targetBubble.appendChild(cursor);
+
+      for (let i = 0; i < text.length; i++) {
+        cursor.insertAdjacentText('beforebegin', text[i]);
+        scrollBottom();
+        await new Promise(r => setTimeout(r, speed + Math.random() * 10));
+      }
+      cursor.remove();
+    }
+
+    function detectMood(text) {
+      const low = text.toLowerCase();
+      if (/vui|hạnh phúc|happy|joy|love|great|proud/.test(low))         return '🌸';
+      if (/buồn|khóc|sad|cry|hurt|lonely|miss/.test(low))               return '🌧️';
+      if (/mệt|kiệt sức|tired|exhausted|drained|heavy/.test(low))       return '🍂';
+      if (/lo|sợ|anxious|worried|afraid|uneasy/.test(low))              return '🌊';
+      if (/giận|tức|angry|mad|annoyed|upset/.test(low))                 return '🔥';
+      return '✨';
+    }
+
+    function addRecentEmotionTrace(text) {
+      const holder = document.getElementById("recentItems");
+      const item   = document.createElement("div");
+      item.className = "diary-entry";
+      item.innerHTML = `
+        <div class="mood-icon">${detectMood(text)}</div>
+        <div class="mood-date">${t().justNow}</div>
+        <div class="mood-note">${text.length > 20 ? text.slice(0, 20) + "…" : text}</div>
+      `;
+      if (holder.dataset.empty === "1") holder.innerHTML = "";
+      holder.dataset.empty = "0";
+      holder.prepend(item);
+    }
+
+    function setupStars() {
+      const starsEl = document.getElementById('stars');
+      for (let i = 0; i < 90; i++) {
+        const s    = document.createElement('div');
+        s.className = 'star';
+        const size  = Math.random() * 2 + 0.5;
+        s.style.cssText = `
+          width:${size}px;height:${size}px;
+          top:${Math.random()*65}%;left:${Math.random()*100}%;
+          --d:${2+Math.random()*4}s;
+          --delay:${Math.random()*5}s;
+          --op:${0.3+Math.random()*0.6};
+        `;
+        starsEl.appendChild(s);
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // API
+    // ═══════════════════════════════════════════════
+    async function fetchJson(url, options = {}) {
+      const res = await fetch(url, options);
+      const contentType = res.headers.get("content-type") || "";
+
+      if (!contentType.includes("application/json")) {
+        throw new Error(`Non-JSON response: ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        const err = new Error(data.reply || data.error || `HTTP ${res.status}`);
+        err.status = res.status;
+        err.data   = data;
+        throw err;
+      }
+
+      return data;
+    }
+
+    async function saveProfile() {
+      await fetchJson('/profile', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id:      ensureUserId(),
+          display_name: state.displayName || null,
+          language:     state.currentLanguage || "Tiếng Việt",
+          device_hash:  makeDeviceHash()
+        })
+      });
+    }
+
+    async function refreshState() {
+      try {
+        const data = await fetchJson(`/state/${ensureUserId()}`);
+        state.memoryEnabled = !!data.memory_enabled;
+        localStorage.setItem("mebost_memory_enabled", state.memoryEnabled ? "1" : "0");
+
+        if (data.display_name) {
+          state.displayName = data.display_name;
+          localStorage.setItem("mebost_name", state.displayName);
+        }
+
+        applyUiTexts();
+
+        const hint = document.getElementById("memoryHint");
+        if (data.memory_summary) {
+          hint.textContent      = data.memory_summary;
+          hint.dataset.hasMemory = "1";
+        } else {
+          hint.textContent      = t().memoryHintEmpty;
+          hint.dataset.hasMemory = "";
+        }
+
+        const recent = document.getElementById("recentItems");
+        recent.innerHTML = "";
+        const emojiMap = { sad: "🌧️", tired: "🍂", anxious: "🌊", angry: "🔥", happy: "🌸", neutral: "✨" };
+
+        if (data.recent_emotions && data.recent_emotions.length) {
+          recent.dataset.empty = "0";
+          data.recent_emotions.forEach(r => {
+            const item = document.createElement("div");
+            item.className = "diary-entry";
+            item.innerHTML = `
+              <div class="mood-icon">${emojiMap[r.emotion] || "✨"}</div>
+              <div class="mood-date">${r.timestamp}</div>
+              <div class="mood-note">${r.emotion}</div>
+            `;
+            recent.appendChild(item);
+          });
+        } else {
+          recent.dataset.empty = "1";
+          const item = document.createElement("div");
+          item.className = "diary-entry";
+          item.innerHTML = `
+            <div class="mood-icon">✨</div>
+            <div class="mood-date">—</div>
+            <div class="mood-note">${t().recentEmpty}</div>
+          `;
+          recent.appendChild(item);
+        }
+      } catch (_) {
+        // /state/ returns 404 until first /profile — silently skip
+      }
+    }
+
+    async function loadMessages(sessionId) {
+      clearChatArea();
+      try {
+        const rows = await fetchJson(`/messages/${sessionId}`);
+        if (!rows.length) {
+          if (state.displayName) {
+            appendMessage('ai', t().welcome(state.displayName), getTime());
+            state.awaitingName = false;
+          } else {
+            appendMessage('ai', t().askName, getTime());
+            state.awaitingName = true;
+          }
+          applyUiTexts();
+          return;
+        }
+
+        rows.forEach(row => {
+          appendMessage(
+            row.role === "assistant" ? "ai" : "user",
+            row.deleted_by_user ? t().forgotten : row.message_text,
+            row.timestamp,
+            row.id,
+            !!row.deleted_by_user
+          );
+        });
+
+        state.awaitingName = !state.displayName;
+        applyUiTexts();
+      } catch (_) {
+        // session doesn't exist yet → show welcome
+        if (state.displayName) {
+          appendMessage('ai', t().welcome(state.displayName), getTime());
+        } else {
+          appendMessage('ai', t().askName, getTime());
+          state.awaitingName = true;
+        }
+        applyUiTexts();
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // CHAT ACTIONS
+    // ═══════════════════════════════════════════════
+    async function handleNameInput(nameText) {
+      state.displayName = nameText;
+      localStorage.setItem("mebost_name", nameText);
+      state.awaitingName = false;
+      await saveProfile();
+      applyUiTexts();
+
+      showTyping();
+      await new Promise(r => setTimeout(r, 450));
+      hideTyping();
+
+      const div    = appendMessage('ai', '', getTime());
+      const bubble = div.querySelector('.bubble');
+      await typewriterEffect(bubble, t().greetAfterName(nameText));
+
+      await refreshState();
+    }
+
+    // ── Stream support detection ──────────────────
+    function supportsStream() {
+      try {
+        return typeof ReadableStream !== 'undefined' && typeof TextDecoder !== 'undefined';
+      } catch (_) { return false; }
+    }
+
+    const _chatPayload = (text) => ({
+      user_id:      ensureUserId(),
+      session_id:   ensureSessionId(),
+      client_type:  "web",
+      display_name: state.displayName || null,
+      device_hash:  makeDeviceHash(),
+      message:      text,
+      language:     state.currentLanguage || 'Tiếng Việt'
+    });
+
+    // ── Stream send ───────────────────────────────
+    async function sendMessageStream(text) {
+      const res = await fetch('/chat/stream', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(_chatPayload(text))
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error(t().fallback);
+      }
+
+      hideTyping();
+      const div    = appendMessage('ai', '', getTime());
+      const bubble = div.querySelector('.bubble');
+      bubble.textContent = '';
+
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        bubble.textContent += chunk;
+        scrollBottom();
+      }
+    }
+
+    // ── Fallback send (non-stream) ────────────────
+    async function sendMessageFallback(text) {
+      const data = await fetchJson('/chat', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(_chatPayload(text))
+      });
+
+      hideTyping();
+      const div    = appendMessage('ai', '', getTime());
+      const bubble = div.querySelector('.bubble');
+      await typewriterEffect(bubble, data.reply || t().fallback);
+    }
+
+    // ── Main send ─────────────────────────────────
+    async function sendMessage() {
+      if (state.isTyping) return;
+
+      const input = document.getElementById('msgInput');
+      const text  = input.value.trim();
+      if (!text) return;
+
+      state.isTyping = true;
+      document.getElementById('sendBtn').disabled = true;
+
+      input.value        = '';
+      input.style.height = 'auto';
+
+      appendMessage('user', text, getTime());
+
+      // Name capture flow
+      if (state.awaitingName && !state.displayName) {
+        await handleNameInput(text);
+        state.isTyping = false;
+        document.getElementById('sendBtn').disabled = false;
+        document.getElementById('msgInput').focus();
+        return;
+      }
+
+      addRecentEmotionTrace(text);
+      showTyping();
+
+      try {
+        if (supportsStream()) {
+          await sendMessageStream(text);
+        } else {
+          await sendMessageFallback(text);
+        }
+      } catch (_) {
+        // Stream failed → try fallback once
+        try {
+          await sendMessageFallback(text);
+        } catch (err2) {
+          hideTyping();
+          const div    = appendMessage('ai', '', getTime());
+          const bubble = div.querySelector('.bubble');
+          await typewriterEffect(bubble, err2?.message || t().fallback);
+        }
+      }
+
+      state.isTyping = false;
+      document.getElementById('sendBtn').disabled = false;
+      document.getElementById('msgInput').focus();
+
+      await refreshState();
+    }
+
+    async function forgetMessage(messageId) {
+      try {
+        await fetchJson('/memory/forget-message', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: ensureUserId(), message_id: messageId })
+        });
+        await loadMessages(state.currentSessionId);
+        await refreshState();
+      } catch (_) {}
+    }
+
+    async function toggleMemory() {
+      state.memoryEnabled = !state.memoryEnabled;
+      localStorage.setItem("mebost_memory_enabled", state.memoryEnabled ? "1" : "0");
+      applyUiTexts();
+
+      try {
+        await fetchJson('/memory/toggle', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: ensureUserId(), enabled: state.memoryEnabled })
+        });
+      } catch (_) {}
+
+      await refreshState();
+    }
+
+    async function clearMemory() {
+      try {
+        await fetchJson('/memory/clear', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: ensureUserId() })
+        });
+      } catch (_) {}
+      document.getElementById("menuSheet").classList.remove("open");
+      await refreshState();
+    }
+
+    function toggleSound() {
+      const audio = document.getElementById("oceanSound");
+      state.soundOn = !state.soundOn;
+      if (state.soundOn) { audio.volume = 0.35; audio.play().catch(() => {}); }
+      else { audio.pause(); }
+      document.getElementById("soundBtn").textContent = state.soundOn ? t().soundOn : t().soundOff;
+    }
+
+    // ═══════════════════════════════════════════════
+    // EVENTS
+    // ═══════════════════════════════════════════════
+    function bindEvents() {
+      const msgInput = document.getElementById("msgInput");
+
+      msgInput.addEventListener("input", () => autoResize(msgInput));
+      msgInput.addEventListener("keydown", function(e) {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+      });
+
+      document.getElementById("sendBtn").onclick = sendMessage;
+      document.getElementById("soundBtn").onclick = toggleSound;
+
+      document.getElementById("menuBtn").onclick = () => {
+        document.getElementById("menuSheet").classList.add("open");
+      };
+
+      document.getElementById("closeMenuBtn").onclick = () => {
+        document.getElementById("menuSheet").classList.remove("open");
+      };
+
+      document.getElementById("newSessionBtn").onclick = async () => {
+        createSessionId();
+        document.getElementById("menuSheet").classList.remove("open");
+        clearChatArea();
+        if (state.displayName) {
+          appendMessage("ai", t().welcome(state.displayName), getTime());
+          state.awaitingName = false;
+        } else {
+          appendMessage("ai", t().askName, getTime());
+          state.awaitingName = true;
+        }
+        applyUiTexts();
+        await refreshState();
+      };
+
+      document.getElementById("memorySwitch").onclick = toggleMemory;
+      document.getElementById("clearMemoryBtn").onclick = clearMemory;
+
+      document.getElementById("chatArea").addEventListener("click", async (e) => {
+        const btn = e.target.closest(".forget-btn");
+        if (!btn) return;
+        const mid = btn.getAttribute("data-mid");
+        if (mid) await forgetMessage(mid);
+      });
+    }
+
+    // ═══════════════════════════════════════════════
+    // BOOT
+    // ═══════════════════════════════════════════════
+    async function finishBoot() {
+      ensureUserId();
+      ensureSessionId();
+      await saveProfile();
+      applyUiTexts();
+      await Promise.all([refreshState(), loadMessages(state.currentSessionId)]);
+      document.getElementById("msgInput").focus();
+    }
+
+    function startLanguageStep() {
+      if (state.currentLanguage) {
+        document.getElementById("languageOverlay").classList.add("hidden");
+        finishBoot();
+        return;
+      }
+
+      const input = document.getElementById("languageInput");
+      const btn   = document.getElementById("languageBtn");
+      const error = document.getElementById("languageError");
+
+      const submit = () => {
+        const raw = input.value.trim();
+        if (!raw) { error.textContent = "Please enter a language."; return; }
+        state.currentLanguage = raw;
+        localStorage.setItem("mebost_lang", raw);
+        applyUiTexts();
+        document.getElementById("languageOverlay").classList.add("hidden");
+        finishBoot();
+      };
+
+      btn.onclick = submit;
+      input.addEventListener("keydown", function(e) {
+        if (e.key === "Enter") { e.preventDefault(); submit(); }
+      });
+      input.focus();
+    }
+
+    function boot() {
+      ensureUserId();
+      bindEvents();
+      setupStars();
+      applyUiTexts();
+      startLanguageStep();
+    }
+
+    boot();
+  </script>
+</body>
+</html>

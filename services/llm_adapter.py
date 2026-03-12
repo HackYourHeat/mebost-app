@@ -160,6 +160,8 @@ def _stream_openrouter(messages: list):
             break
         try:
            chunk = json.loads(payload)
+if not isinstance(chunk, dict):
+    continue
 
 choices = chunk.get("choices")
 if not choices:

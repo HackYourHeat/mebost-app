@@ -34,8 +34,8 @@ def _headers() -> dict:
     return {
         "Content-Type":  "application/json",
         "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY', '')}",
-        "HTTP-Referer":  "https://haidang.app",
-        "X-Title":       "Hải Đăng",
+        "HTTP-Referer":  "https://mebost.vn",
+        "X-Title":       "Mebost",
     }
 
 

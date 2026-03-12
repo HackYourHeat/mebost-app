@@ -4,11 +4,8 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "gunicorn app:app --bind 0.0.0.0:$PORT --workers 2",
-    "preDeployCommand": "python migrate.py",
+    "startCommand": "gunicorn app:app",
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 3,
-    "healthcheckPath": "/health",
-    "healthcheckTimeout": 30
+    "restartPolicyMaxRetries": 10
   }
 }

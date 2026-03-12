@@ -39,17 +39,17 @@ def generate_reply(messages: list) -> str:
 
             if status == 429:
                 wait = _parse_retry_after(e.response) or delay * 2
-                logger.warning("LLM 429 rate limit — wait %.1fs (attempt %d)", wait, attempt)
+                logger.warning("LLM 429 rate limit - wait %.1fs (attempt %d)", wait, attempt)
                 time.sleep(wait)
                 last_err = e
                 continue
 
             if status in (401, 403):
-                logger.error("LLM auth error %d — khong retry", status)
+                logger.error("LLM auth error %d - khong retry", status)
                 break
 
             if status >= 500:
-                logger.warning("LLM %d server error — retry in %ds (attempt %d)", status, delay, attempt)
+                logger.warning("LLM %d server error - retry in %ds (attempt %d)", status, delay, attempt)
                 last_err = e
                 if attempt < len(_RETRY_DELAYS):
                     time.sleep(delay)
@@ -59,13 +59,13 @@ def generate_reply(messages: list) -> str:
             break
 
         except requests.exceptions.Timeout:
-            logger.warning("LLM timeout — retry in %ds (attempt %d)", delay, attempt)
+            logger.warning("LLM timeout - retry in %ds (attempt %d)", delay, attempt)
             last_err = Exception("timeout")
             if attempt < len(_RETRY_DELAYS):
                 time.sleep(delay)
 
         except requests.exceptions.RequestException as e:
-            logger.warning("LLM network error — retry in %ds (attempt %d): %s", delay, attempt, e)
+            logger.warning("LLM network error - retry in %ds (attempt %d): %s", delay, attempt, e)
             last_err = e
             if attempt < len(_RETRY_DELAYS):
                 time.sleep(delay)
@@ -90,18 +90,15 @@ def _call_openrouter(messages: list) -> str:
 def generate_reply_stream(messages: list):
     try:
         yield from _stream_openrouter(messages)
-
     except requests.exceptions.HTTPError as e:
         status = e.response.status_code if e.response is not None else 0
-        logger.warning("stream HTTP %d — fallback to non-stream", status)
+        logger.warning("stream HTTP %d - fallback to non-stream", status)
         yield from _non_stream_fallback(messages)
-
     except requests.exceptions.Timeout:
-        logger.warning("stream timeout — fallback to non-stream")
+        logger.warning("stream timeout - fallback to non-stream")
         yield from _non_stream_fallback(messages)
-
     except requests.exceptions.RequestException as e:
-        logger.warning("stream network error — fallback to non-stream: %s", e)
+        logger.warning("stream network error - fallback to non-stream: %s", e)
         yield from _non_stream_fallback(messages)
 
 
@@ -142,7 +139,6 @@ def _stream_openrouter(messages: list):
             text = delta.get("content")
             if text:
                 yield text
-
         except (KeyError, ValueError, TypeError, IndexError):
             continue
 

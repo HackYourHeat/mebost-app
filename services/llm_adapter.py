@@ -27,7 +27,7 @@ _STREAM_TIMEOUT  = 90              # stream connection timeout
 _EMOTION_TIMEOUT = 20
 
 logger = logging.getLogger("mebost")
-
+
 
 def _headers() -> dict:
     """Rebuild headers mỗi lần — đảm bảo đọc API key từ env runtime."""
@@ -159,10 +159,17 @@ def _stream_openrouter(messages: list):
         if payload == "[DONE]":
             break
         try:
-            chunk = json.loads(payload)
-            text  = chunk["choices"][0].get("delta", {}).get("content", "")
-            if text:
-                yield text
+           chunk = json.loads(payload)
+
+choices = chunk.get("choices")
+if not choices:
+    continue
+
+delta = choices[0].get("delta", {})
+text = delta.get("content")
+
+if text:
+    yield text
         except (KeyError, ValueError):
             continue
 

@@ -53,18 +53,25 @@ _STUCK_PATTERNS = [
 
 
 def select_strategy(
-    message:    str,
-    intent:     str,
-    emotion:    str,
-    policy:     dict | None = None,
-    mirror_mode: str = "deep_mirror",
+    message:     str,
+    intent:      str,
+    emotion:     str,
+    policy:      dict | None = None,
+    mirror_mode: str = "deep_mirror",   # kept for compat, used lightly
+    trust:       float = 0.30,
+    momentum:    float = 0.0,
+    arc:         str   = "none",
+    bond_stage:  str   = "new",
 ) -> str:
     """
     Trả về strategy string cho lượt này.
     Fail-safe: luôn trả về một trong STRATEGIES.
     """
     try:
-        return _select(message, intent, emotion, policy or {}, mirror_mode)
+        return _select(
+            message, intent, emotion, policy or {},
+            mirror_mode, trust, momentum, arc, bond_stage,
+        )
     except Exception:
         return "reflect"
 
@@ -82,28 +89,32 @@ def strategy_instruction(strategy: str, advice_allowed: bool = False) -> str:
         "comfort": (
             "Lượt này: an ủi trước. "
             "Xác nhận cảm xúc, không phán xét, không reframe vội. "
-            "Nếu user đang tự trách, nói nhẹ rằng điều đó không hoàn toàn đúng."
+            "Nếu user đang tự trách, nói nhẹ rằng điều đó không hoàn toàn đúng. "
+            "Không mirror lại cảm xúc — hãy đứng cạnh, không chỉ phản chiếu."
         ),
         "engage": (
             "Lượt này: nói thẳng hơn. "
             "User đang muốn được nghe — đừng hỏi ngược. "
-            "Thừa nhận nếu đã hỏi quá nhiều. Đưa ra điều gì đó cụ thể."
+            "Thừa nhận nếu đã hỏi quá nhiều. Đưa ra điều gì đó cụ thể. "
+            "Không mirror, không paraphrase cảm xúc."
         ),
         "guide": (
             "Lượt này: đưa hướng. "
-            "User đang xin giúp — hãy gợi ý 1–2 bước nhỏ hoặc góc nhìn cụ thể. "
-            "Giọng vẫn nhẹ, không áp đặt, nhưng phải có nội dung thực."
+            "User đang xin giúp — gợi ý tối đa 1–2 bước nhỏ hoặc góc nhìn cụ thể. "
+            "Giọng nhẹ, không áp đặt, không chuyển sang coaching mode. "
+            "Không mirror. Không hỏi ngược. Phải có nội dung thực."
         ),
         "reframe": (
             "Lượt này: giúp nhìn lại. "
             "Đặt vấn đề user đang gặp vào một góc nhìn khác nhẹ nhàng hơn. "
-            "Không mâu thuẫn thẳng, nhưng mở ra cách nghĩ ít tự trách hơn."
+            "Không phủ nhận cảm xúc user. Không nói 'bạn sai' hay 'bạn nên nghĩ khác đi'. "
+            "Mở ra cách nghĩ ít tự trách hơn — nhẹ nhàng, không áp đặt."
         ),
     }
     base = _INSTRUCTIONS.get(strategy, _INSTRUCTIONS["reflect"])
-    if strategy in ("guide", "engage") and not advice_allowed:
-        # Đảm bảo policy không block lời khuyên khi strategy yêu cầu
-        base += " [advice_allowed override: strategy requires it]"
+    # guide và engage luôn override advice_allowed — strategy yêu cầu
+    if strategy in ("guide", "engage"):
+        base += " [advice unlocked]"
     return base
 
 
@@ -112,11 +123,15 @@ def strategy_instruction(strategy: str, advice_allowed: bool = False) -> str:
 # --------------------------------------------------
 
 def _select(
-    message: str,
-    intent:  str,
-    emotion: str,
-    policy:  dict,
+    message:    str,
+    intent:     str,
+    emotion:    str,
+    policy:     dict,
     mirror_mode: str,
+    trust:      float = 0.30,
+    momentum:   float = 0.0,
+    arc:        str   = "none",
+    bond_stage: str   = "new",
 ) -> str:
     msg_lower = message.lower()
 
@@ -126,20 +141,34 @@ def _select(
 
     # Priority 2: Self-attack → comfort hoặc reframe
     if any(p in msg_lower for p in _SELF_ATTACK_PATTERNS):
-        # Nếu nặng (nhiều từ tự trách) → comfort, nhẹ hơn → reframe
         hit_count = sum(1 for p in _SELF_ATTACK_PATTERNS if p in msg_lower)
-        return "comfort" if hit_count >= 2 else "reframe"
+        # Trust cao + bond sâu → reframe (họ đã sẵn sàng nghe lại)
+        # Trust thấp, bond mới, hoặc attack rất nặng (3+ từ) → comfort trước
+        if trust >= 0.60 and bond_stage not in ("new", "distant") and hit_count < 3:
+            return "reframe"
+        return "comfort"
 
-    # Priority 3: Intent help → guide
-    if intent == "help" or policy.get("advice_allowed"):
+    # Priority 3: Intent help luôn → guide (kể cả khi advice_allowed=False)
+    if intent == "help":
         return "guide"
 
     # Priority 4: Stuck → guide
     if any(p in msg_lower for p in _STUCK_PATTERNS):
         return "guide"
 
-    # Priority 5: Cảm xúc nặng, chưa xin giúp → reflect
-    # (mirror mode silent_presence cũng map về reflect)
+    # Priority 5: Relational context — bond sâu + arc creative/project → guide
+    if bond_stage in ("close", "deep") and arc in ("creative_project", "growth", "career"):
+        return "guide"
+
+    # Priority 6: Trust cao → cho phép reframe
+    if trust >= 0.70 and emotion in ("sad", "anxious") and bond_stage not in ("new",):
+        return "reframe"
+
+    # Priority 7: Momentum thấp → prefer reflect (user muốn được nghe)
+    if momentum < 0.10:
+        return "reflect"
+
+    # Priority 8: silent_presence → comfort
     if mirror_mode == "silent_presence":
         return "comfort"
 

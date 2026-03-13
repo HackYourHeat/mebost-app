@@ -425,6 +425,10 @@ def _build_pipeline_context(body: dict):
         emotion      = emotion_ctx["emotion"],
         policy       = policy,
         mirror_mode  = presence.get("presence_mode", "steady"),
+        trust        = trust,
+        momentum     = momentum,
+        arc          = relational_ctx.get("arc", "none")    if relational_ctx else "none",
+        bond_stage   = relational_ctx.get("bond_stage", "new") if relational_ctx else "new",
     )
     # Conv state override — tránh stuck trong reflect loop
     response_strategy = conv_state_strategy_override(conv_state, response_strategy)

@@ -11,13 +11,14 @@ Hiển thị "sức khỏe tâm hồn" của hệ thống:
   - Top active users
 
 ADMIN_KEY: set qua biến môi trường ADMIN_KEY
-           (nếu không set: mặc định "haidang-soul-2026" — đổi trước deploy)
 """
 from __future__ import annotations
 import os
 from db import get_db, db_mode, utc_now_iso
 
-ADMIN_KEY = os.environ.get("ADMIN_KEY", "haidang-soul-2026")
+# ADMIN_KEY bắt buộc từ env var — không có default để tránh security risk
+_raw_admin_key = os.environ.get("ADMIN_KEY", "")
+ADMIN_KEY = _raw_admin_key if _raw_admin_key else "CHANGE_ME_SET_ADMIN_KEY_ENV_VAR"
 
 
 def _q(db, sql, params=()):

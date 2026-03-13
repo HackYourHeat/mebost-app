@@ -91,12 +91,12 @@ def temporal_prompt_hint(ctx: dict) -> str:
 
     if cont == "pause":
         h = round(gap / 60, 1)
-        return f"User vừa quay lại sau {h} giờ — kết nối lại nhẹ nhàng, có thể nhắc lại chủ đề trước."
+        return "User vừa quay lại — kết nối lại nhẹ nhàng, có thể nhắc lại chủ đề trước."
 
     if cont == "return":
         if days >= 7:
             return (
-                f"User quay lại sau {days} ngày — chào đón ấm áp, "
+                "User quay lại sau một thời gian — chào đón ấm áp, hỏi thăm nhẹ trước khi đi vào chủ đề cũ."
                 "hỏi nhẹ về thời gian vừa qua trước khi đi vào chủ đề sâu."
             )
         return "User quay lại sau hơn 1 ngày — kết nối lại trước, không nhảy vào chủ đề cũ ngay."

@@ -29,9 +29,11 @@ from services.response_policy_v2 import (
 # Anti-loop rules — luôn inject, ~30 tokens
 _ANTI_LOOP = (
     "Không phản chiếu lặp quá 1–2 nhịp. "
+    "Nếu strategy không phải reflect: tuyệt đối không mirror lại cảm xúc user. "
     "Nếu user xin giúp trực tiếp: đưa góc nhìn hoặc bước nhỏ cụ thể. "
     "Không chỉ hỏi ngược khi user đang tìm hướng. "
-    "Không lặp lại cảm xúc của user như máy."
+    "Không lặp lại cảm xúc của user như máy. "
+    "Không mở đầu bằng 'Mình hiểu bạn đang...' trừ khi strategy là reflect."
 )
 
 
@@ -109,7 +111,9 @@ def build_system_prompt(
     # Chỉ inject mirror block nếu strategy KHÔNG phải guide/engage
     # (tránh mirror block mâu thuẫn với strategy)
     strategy_type = _extract_strategy(strategy_hint)
-    if strategy_type not in ("guide", "engage", "comfort"):
+    # Mirror block CHỈ inject khi strategy == reflect.
+    # guide / engage / comfort / reframe đều override mirror hoàn toàn.
+    if strategy_type == "reflect":
         mirror_block = build_mirror_prompt_block(mirror_policy)
         if mirror_block:
             parts.append(mirror_block)

@@ -6,9 +6,7 @@ Chạy trước start command: python migrate.py
 Railway config:
   "preDeployCommand": "python migrate.py"
 """
-import os
-import sys
-import time
+import sys, os, time
 
 print("=" * 50)
 print("MEBOST — Pre-deploy migration")

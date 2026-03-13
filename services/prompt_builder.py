@@ -69,6 +69,7 @@ def build_system_prompt(
     emotion_ctx:       dict | None = None,
     intent_ctx:        dict | None = None,
     strategy_hint:     str   = "",     # từ response_strategy_engine
+    conv_state_block:  str   = "",     # từ conversation_state_engine
 ) -> str:
 
     parts: list[str] = []
@@ -85,6 +86,10 @@ def build_system_prompt(
     # Nếu strategy là guide/engage → overrides mirror tendency.
     if strategy_hint:
         parts.append(strategy_hint)
+
+    # ── [3b] Conversational RAM state ────────────────
+    if conv_state_block:
+        parts.append(conv_state_block)
 
     # ── [4] Mirror mode ───────────────────────────
     # Compute nếu chưa có

@@ -23,17 +23,17 @@ from __future__ import annotations
 import re
 
 # Hard cap toàn bộ memory block
-MEMORY_HARD_CAP_CHARS = 800   # ~200 tokens
+MEMORY_HARD_CAP_CHARS = 1600  # ~400 tokens — đủ để nhớ context thật
 
 # Budget per layer (chars)
 _BUDGET = {
-    "identity":     160,   # ~40t
-    "active_thread":320,   # ~80t
-    "deep_memory":  240,   # ~60t
+    "identity":     240,   # ~60t
+    "active_thread":480,   # ~120t
+    "deep_memory":  400,   # ~100t
 }
 
 # Minimum relevance score để inject deep_memory
-_DEEP_MEMORY_THRESHOLD = 0.35
+_DEEP_MEMORY_THRESHOLD = 0.25  # thấp hơn để bắt được memory liên quan
 
 
 # --------------------------------------------------

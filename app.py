@@ -57,7 +57,11 @@ from services.personality_dna_engine    import (
 from services.familiarity_engine        import compute_familiarity
 from services.presence_engine           import compute_presence, presence_prompt_block
 from services.memory_selector           import select_memory
-from services.response_strategy_engine import select_strategy, strategy_instruction
+from services.response_strategy_engine  import select_strategy, strategy_instruction
+from services.conversation_state_engine import (
+    get_conv_state, update_conv_state,
+    conv_state_strategy_override, conv_state_prompt_block,
+)
 from services.relational_continuity_engine import (
     compute_relational_continuity, continuity_prompt_hint,
 )
@@ -410,8 +414,11 @@ def _build_pipeline_context(body: dict):
         old_trust, trust, trust_signal, get_trust_level(trust),
     )
 
-    # ── Layer 9a: Response Strategy ─────────────────────────
-    # Deterministic: chọn loại phản hồi (reflect/comfort/engage/guide/reframe)
+    # ── Layer 9a: Conversational RAM ────────────────────────
+    conv_state = get_conv_state(session_id)
+
+    # ── Layer 9b: Response Strategy ──────────────────────────
+    # Deterministic: chọn loại phản hồi, có thể override bởi conv state
     response_strategy = select_strategy(
         message      = message,
         intent       = intent_ctx["intent"],
@@ -419,9 +426,15 @@ def _build_pipeline_context(body: dict):
         policy       = policy,
         mirror_mode  = presence.get("presence_mode", "steady"),
     )
+    # Conv state override — tránh stuck trong reflect loop
+    response_strategy = conv_state_strategy_override(conv_state, response_strategy)
+
     strategy_hint = strategy_instruction(response_strategy, policy.get("advice_allowed", False))
     get_user_logger(user_id).info(
-        "STRATEGY strategy=%s advice=%s", response_strategy, policy.get("advice_allowed", False)
+        "STRATEGY strategy=%s advice=%s streak=%d qtol=%s",
+        response_strategy, policy.get("advice_allowed", False),
+        conv_state.get("reflection_streak", 0),
+        conv_state.get("question_tolerance", "high"),
     )
 
     # ── Layer 9: Prompt ───────────────────────────────────────
@@ -465,6 +478,7 @@ def _build_pipeline_context(body: dict):
         intent_ctx=intent_ctx,
         mirror_policy=_mirror_policy,
         strategy_hint=strategy_hint,
+        conv_state_block=conv_state_prompt_block(conv_state),
     )
     user_prompt      = build_user_prompt(language, message, recent_context, hints)
     messages_payload = build_messages_payload(system_prompt, user_prompt)
@@ -723,6 +737,16 @@ def chat():
         )
         ulog_response(ctx["user_id"], response_time_ms, len(reply))
         save_bio_state(ctx["user_id"], ctx["bio_state"])
+        # Update conversational RAM after response
+        update_conv_state(
+            session_id  = ctx["session_id"],
+            message     = body.get("message", ""),
+            emotion_ctx = ctx["emotion_ctx"],
+            intent_ctx  = ctx["intent_ctx"],
+            strategy    = ctx.get("_prod_mirror_mode", "reflect"),
+            response    = reply,
+        )
+
         get_user_logger(ctx["user_id"]).info(
             "PROD_SIG model=%s prompt_t=%d mem_t=%d mode=%s llm_ms=%d total_ms=%d trust=%.2f distress=%.2f",
             ctx.get("_prod_model","?"),
@@ -938,7 +962,6 @@ def soul_dashboard():
         return jsonify({"error": str(e)}), 500
 
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+
 if __name__ == "__main__":
     app.run(debug=True)

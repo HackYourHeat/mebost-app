@@ -4,7 +4,7 @@ from db import get_db, utc_now_iso
 # Constants
 # --------------------------------------------------
 
-DEFAULT_NODE_LIMIT   = 8
+DEFAULT_NODE_LIMIT   = 30   # fetch pool lớn để selector có đủ để chọn
 MAX_CHARS_PER_LINE   = 120
 
 

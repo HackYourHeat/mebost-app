@@ -17,4 +17,4 @@ RUN mkdir -p logs/users logs/analytics data static
 
 EXPOSE 8080
 
-CMD python migrate.py && gunicorn app:app --bind 0.0.0.0:${PORT:-8080} --workers 2 --timeout 120 --keep-alive 5 --log-level info --access-logfile -
+CMD ["sh", "-c", "python migrate.py && gunicorn app:app --bind 0.0.0.0:${PORT:-8080} --workers 2 --timeout 120 --keep-alive 5 --log-level info --access-logfile -"]

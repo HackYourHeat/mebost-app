@@ -16,13 +16,8 @@ import os, sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
-# Railway inject "postgres://" nhưng psycopg2 cần "postgresql://"
-_raw_db_url = os.environ.get("DATABASE_URL", "")
-if _raw_db_url.startswith("postgres://"):
-    _raw_db_url = "postgresql://" + _raw_db_url[len("postgres://"):]
-    os.environ["DATABASE_URL"] = _raw_db_url
-DATABASE_URL = _raw_db_url
-_USE_PG      = bool(DATABASE_URL and DATABASE_URL.startswith("postgresql://"))
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+_USE_PG      = bool(DATABASE_URL and DATABASE_URL.startswith(("postgres://","postgresql://")))
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = "/data" if os.path.isdir("/data") else os.path.join(BASE_DIR, "data")

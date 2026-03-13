@@ -1,15 +1,20 @@
 # --------------------------------------------------
-# Prompt Builder — MEBOST Hải Đăng V3.2
-# Mirror-first architecture.
+# Prompt Builder — MEBOST Hải Đăng V3.3
+# --------------------------------------------------
+# Target: ~300–400 tokens total (với memory)
 #
-# System prompt target: ~250–350 tokens (down from ~900)
-# Structure:
-#   [1] CORE_IDENTITY   — ~200t, bất biến
-#   [2] Language rule   — ~10t
-#   [3] Mirror mode     — ~40t, per-turn
-#   [4] Pronoun         — ~10t
-#   [5] Memory          — ~60t max
-#   [6] Open loops      — ~20t max (nếu có)
+# Block order:
+#   [1] CORE_IDENTITY         — ~200t, bất biến
+#   [2] Language              — ~10t
+#   [3] Response strategy     — ~25t, điều khiển thật sự
+#   [4] Mirror mode           — ~30t, nhường đường nếu strategy là guide/engage
+#   [5] Anti-loop rules       — ~30t, luôn inject
+#   [6] Presence + DNA        — ~20t, compact
+#   [7] Pronoun               — ~10t
+#   [8] Display name          — ~5t
+#   [9] Memory                — ~60t max
+#   [10] Open loops           — ~15t max
+#   [11] Life graph           — ~15t max
 # --------------------------------------------------
 
 from __future__ import annotations
@@ -21,10 +26,14 @@ from services.response_policy_v2 import (
     build_mirror_prompt_block,
 )
 
+# Anti-loop rules — luôn inject, ~30 tokens
+_ANTI_LOOP = (
+    "Không phản chiếu lặp quá 1–2 nhịp. "
+    "Nếu user xin giúp trực tiếp: đưa góc nhìn hoặc bước nhỏ cụ thể. "
+    "Không chỉ hỏi ngược khi user đang tìm hướng. "
+    "Không lặp lại cảm xúc của user như máy."
+)
 
-# --------------------------------------------------
-# Public API — signature giữ nguyên để không phá app.py
-# --------------------------------------------------
 
 def build_system_prompt(
     language:          str,
@@ -33,7 +42,7 @@ def build_system_prompt(
     policy:            dict,
     bio_state:         dict,
     conscious_state:   dict,
-    life_graph_summary:dict,
+    life_graph_summary,
     expressive_state:  dict,
     message_len:       int   = 0,
     listening_style:   str   = "gentle_companion",
@@ -56,10 +65,10 @@ def build_system_prompt(
     personality_dna:   dict | None = None,
     familiarity:       dict | None = None,
     presence:          dict | None = None,
-    # Mirror policy — passed từ app.py nếu có, tính lại nếu không
     mirror_policy:     dict | None = None,
     emotion_ctx:       dict | None = None,
     intent_ctx:        dict | None = None,
+    strategy_hint:     str   = "",     # từ response_strategy_engine
 ) -> str:
 
     parts: list[str] = []
@@ -71,8 +80,14 @@ def build_system_prompt(
     if language and language.lower() not in ("tiếng việt", "vietnamese", "vi"):
         parts.append(f"Respond in: {language}")
 
-    # ── [3] Mirror mode block ─────────────────────
-    # Tính mirror policy nếu chưa được pass vào
+    # ── [3] Response strategy (ưu tiên cao nhất) ─
+    # Đây là chỉ dẫn điều khiển hành vi lượt này.
+    # Nếu strategy là guide/engage → overrides mirror tendency.
+    if strategy_hint:
+        parts.append(strategy_hint)
+
+    # ── [4] Mirror mode ───────────────────────────
+    # Compute nếu chưa có
     if mirror_policy is None:
         from services.response_policy_v2 import compute_mirror_policy
         mirror_policy = compute_mirror_policy(
@@ -86,37 +101,74 @@ def build_system_prompt(
             momentum       = momentum,
         )
 
-    mirror_block = build_mirror_prompt_block(mirror_policy)
-    if mirror_block:
-        parts.append(mirror_block)
+    # Chỉ inject mirror block nếu strategy KHÔNG phải guide/engage
+    # (tránh mirror block mâu thuẫn với strategy)
+    strategy_type = _extract_strategy(strategy_hint)
+    if strategy_type not in ("guide", "engage", "comfort"):
+        mirror_block = build_mirror_prompt_block(mirror_policy)
+        if mirror_block:
+            parts.append(mirror_block)
 
-    # ── [4] Pronoun ───────────────────────────────
+    # ── [5] Anti-loop rules ───────────────────────
+    parts.append(_ANTI_LOOP)
+
+    # ── [6] Presence + DNA compact ────────────────
+    _presence_mode = (presence or {}).get("presence_mode", "steady")
+    presence_hints = {
+        "quiet":   "Hiện diện nhẹ nhàng — không đẩy, không kéo.",
+        "close":   "Gần gũi và ấm hơn bình thường.",
+        "holding": "Giữ chỗ — user đang mong manh. Ưu tiên an toàn.",
+        "steady":  None,
+    }
+    if presence_hints.get(_presence_mode):
+        parts.append(presence_hints[_presence_mode])
+
+    # Personality DNA — compact
+    if personality_dna:
+        empathy  = personality_dna.get("empathy",   0.5)
+        guidance = personality_dna.get("guidance",  0.5)
+        if guidance > 0.55:
+            parts.append("User phản hồi tốt với định hướng cụ thể — ưu tiên guide hơn câu hỏi.")
+        elif empathy > 0.75:
+            parts.append("User cần được cảm nhận trước — phản chiếu ấm trước khi suggest.")
+
+    # Listening style compact
+    _STYLE_HINTS = {
+        "gentle_companion":  "Giọng ấm, nhịp chậm, không dồn dập.",
+        "active_listener":   "Phản chiếu tích cực, xác nhận cảm xúc.",
+        "direct_support":    "Rõ ràng, thực dụng, ít vòng vo.",
+        "exploratory":       "Mở câu hỏi không gian — nhưng tối đa 1.",
+    }
+    style_hint = _STYLE_HINTS.get(listening_style or "gentle_companion")
+    if style_hint:
+        parts.append(style_hint)
+
+    # ── [7] Pronoun ───────────────────────────────
     if pronoun_profile:
         ai_p   = pronoun_profile.get("ai_pronoun",   "mình")
         user_p = pronoun_profile.get("user_pronoun", "bạn")
         if ai_p != "mình" or user_p != "bạn":
             parts.append(f"Xưng: {ai_p} — gọi user: {user_p}.")
 
-    # ── [5] Display name ──────────────────────────
+    # ── [8] Display name ──────────────────────────
     if display_name and display_name.lower() not in ("user", "bạn", ""):
         parts.append(f"Tên người dùng: {display_name}.")
 
-    # ── [6] Memory — compact, max ~60 tokens ──────
+    # ── [9] Memory — compact, max ~60 tokens ──────
     if memory_summary and len(memory_summary.strip()) > 10:
         mem = memory_summary.strip()
-        # Hard cap: 240 chars ~ 60 tokens
         if len(mem) > 240:
             mem = mem[:237] + "..."
         parts.append(f"Ký ức về user:\n{mem}")
 
-    # ── [7] Open loops — compact ──────────────────
+    # ── [10] Open loops ───────────────────────────
     if relational_ctx:
         loops = relational_ctx.get("open_loops", [])
         if loops:
-            loop_text = "; ".join(loops[:2])  # max 2 loops
+            loop_text = "; ".join(loops[:2])
             parts.append(f"Chủ đề còn bỏ ngỏ: {loop_text}")
 
-    # ── [8] Life graph — chỉ inject nếu có signal ─
+    # ── [11] Life graph ───────────────────────────
     if life_graph_summary:
         lg = life_graph_summary
         if isinstance(lg, dict):
@@ -127,34 +179,72 @@ def build_system_prompt(
         elif isinstance(lg, str) and len(lg.strip()) > 10:
             parts.append(f"Chủ đề cuộc đời: {lg.strip()[:120]}")
 
-    # ── [9] Thread context — nếu có ──────────────
-    if thread_context and len(thread_context.strip()) > 10:
-        tc = thread_context.strip()[:200]
-        parts.append(f"Thread hiện tại:\n{tc}")
-
-    # ── [10] Advice gate — chỉ khi KHÔNG được phép
-    # (mirror_block đã inject, nhưng nếu policy override allow → note)
-    if policy.get("advice_allowed") and not mirror_policy.get("advice_allowed"):
-        parts.append("Lượt này có thể đưa lời khuyên nếu user hỏi trực tiếp.")
-
     return "\n\n".join(p for p in parts if p and p.strip())
 
 
+def _extract_strategy(hint: str) -> str:
+    """Lấy strategy type từ hint string."""
+    hint_lower = hint.lower()
+    for s in ("guide", "engage", "comfort", "reframe", "reflect"):
+        if s in hint_lower:
+            return s
+    return "reflect"
+
+
 # --------------------------------------------------
-# User prompt (giữ nguyên)
+# User prompt — compact nhưng có context
 # --------------------------------------------------
 
 def build_user_prompt(
     language: str,
     message:  str,
-    context:  list[dict],
+    context,          # str (từ get_recent_context) hoặc list[dict]
     hints:    str = "",
 ) -> str:
-    return message.strip()
+    """
+    User prompt gọn: context gần nhất + hints + message.
+    context có thể là str (formatted) hoặc list[dict].
+    """
+    parts = []
+
+    # Recent context
+    if context:
+        if isinstance(context, str) and context.strip():
+            # Trim nếu quá dài
+            ctx = context.strip()
+            if len(ctx) > 300:
+                ctx = ctx[-300:]
+            parts.append(f"Trước đó:\n{ctx}")
+        elif isinstance(context, list):
+            recent = context[-2:] if len(context) >= 2 else context
+            ctx_lines = []
+            for turn in recent:
+                if not isinstance(turn, dict):
+                    continue
+                role = turn.get("role", "")
+                text = (turn.get("content") or "").strip()
+                if role and text:
+                    label = "User" if role == "user" else "Hải Đăng"
+                    if len(text) > 100:
+                        text = text[:97] + "..."
+                    ctx_lines.append(f"{label}: {text}")
+            if ctx_lines:
+                parts.append("Trước đó:\n" + "\n".join(ctx_lines))
+
+    # Hints compact — 1 dòng có ý nghĩa
+    if hints:
+        first_hint = next((l.strip() for l in hints.split("\n") if l.strip()), "")
+        if first_hint and len(first_hint) < 120:
+            parts.append(f"[{first_hint}]")
+
+    # Current message
+    parts.append(message.strip())
+
+    return "\n\n".join(parts)
 
 
 # --------------------------------------------------
-# Messages payload (giữ nguyên)
+# Messages payload
 # --------------------------------------------------
 
 def build_messages_payload(
@@ -162,6 +252,6 @@ def build_messages_payload(
     user_prompt:   str,
 ) -> list[dict]:
     return [
-        {"role": "system",  "content": system_prompt},
-        {"role": "user",    "content": user_prompt},
+        {"role": "system", "content": system_prompt},
+        {"role": "user",   "content": user_prompt},
     ]

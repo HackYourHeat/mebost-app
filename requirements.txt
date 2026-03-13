@@ -1,9 +1,13 @@
 # ── Core ──────────────────────────────────────────────
 Flask==3.0.3
-gunicorn==22.0.0
-requests==2.32.3
-python-dotenv==1.0.1
 Werkzeug>=3.0.0
-httpx==0.27.0
+python-dotenv==1.0.1
+requests==2.32.3
+gunicorn==22.0.0
+
+# ── Static files (Railway production) ─────────────────
 whitenoise==6.7.0
 
+# ── PostgreSQL (Railway Postgres plugin) ──────────────
+# Bỏ comment khi dùng DATABASE_URL từ Railway Postgres:
+# psycopg2-binary==2.9.9

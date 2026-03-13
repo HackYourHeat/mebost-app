@@ -137,17 +137,23 @@ def select_response_policy(
     Returns:
         {"policy": str, "advice_allowed": bool}
     """
-    if emotion in ("sad", "anxious", "angry") and intensity >= 7:
-        return {"policy": "reflect_first", "advice_allowed": False}
+    # ── Rule 1: intent=help LUÔN được phép advice ─────────────
+    # Kể cả khi emotion nặng — user xin giúp trực tiếp thì phải giúp.
+    # Style vẫn gentle, nhưng không block advice.
+    if intent == "help":
+        return {"policy": "supportive_help", "advice_allowed": True}
 
+    # ── Rule 2: vent → chỉ nghe, không khuyên ─────────────────
     if intent == "vent":
         return {"policy": "listen_only", "advice_allowed": False}
 
+    # ── Rule 3: cảm xúc nặng, chưa xin giúp → reflect trước ──
+    if emotion in ("sad", "anxious", "angry") and intensity >= 7:
+        return {"policy": "reflect_first", "advice_allowed": False}
+
+    # ── Rule 4: reflection sâu → deep mode ────────────────────
     if reflection_depth >= 0.6:
         return {"policy": "deep_reflection", "advice_allowed": False}
-
-    if intent == "help" and intensity < 7:
-        return {"policy": "supportive_help", "advice_allowed": True}
 
     return {"policy": "normal_companion", "advice_allowed": False}
 

@@ -57,6 +57,7 @@ from services.personality_dna_engine    import (
 from services.familiarity_engine        import compute_familiarity
 from services.presence_engine           import compute_presence, presence_prompt_block
 from services.memory_selector           import select_memory
+from services.response_strategy_engine import select_strategy, strategy_instruction
 from services.relational_continuity_engine import (
     compute_relational_continuity, continuity_prompt_hint,
 )
@@ -218,12 +219,10 @@ def _build_pipeline_context(body: dict):
     trust_signal = compute_trust_signal(message, emotion_ctx["intensity"], momentum)
     trust        = update_trust_state(user_id, trust_signal, old_trust)
 
-    # ── Layer 4: Policy (now has real momentum + trust) ───────
-    policy = choose_response_policy(
-        emotion_ctx["emotion"], emotion_ctx["intensity"],
-        intent_ctx["intent"],
-        message_len=message_len, momentum=momentum, trust=trust,
-    )
+    # ── Layer 4: Policy ───────────────────────────────────────
+    # Nguồn chính: consciousness_engine (emotion + intent + depth).
+    # Intent=help luôn unlock advice kể cả khi emotion nặng.
+    # choose_response_policy đã bỏ — tránh overwrite mù quáng.
     policy = consciousness_to_policy_dict(conscious_state)
 
     # ── Layer 5: Personality ──────────────────────────────────
@@ -411,6 +410,20 @@ def _build_pipeline_context(body: dict):
         old_trust, trust, trust_signal, get_trust_level(trust),
     )
 
+    # ── Layer 9a: Response Strategy ─────────────────────────
+    # Deterministic: chọn loại phản hồi (reflect/comfort/engage/guide/reframe)
+    response_strategy = select_strategy(
+        message      = message,
+        intent       = intent_ctx["intent"],
+        emotion      = emotion_ctx["emotion"],
+        policy       = policy,
+        mirror_mode  = presence.get("presence_mode", "steady"),
+    )
+    strategy_hint = strategy_instruction(response_strategy, policy.get("advice_allowed", False))
+    get_user_logger(user_id).info(
+        "STRATEGY strategy=%s advice=%s", response_strategy, policy.get("advice_allowed", False)
+    )
+
     # ── Layer 9: Prompt ───────────────────────────────────────
     from services.response_policy_v2 import compute_mirror_policy
     _mirror_policy = compute_mirror_policy(
@@ -451,6 +464,7 @@ def _build_pipeline_context(body: dict):
         emotion_ctx=emotion_ctx,
         intent_ctx=intent_ctx,
         mirror_policy=_mirror_policy,
+        strategy_hint=strategy_hint,
     )
     user_prompt      = build_user_prompt(language, message, recent_context, hints)
     messages_payload = build_messages_payload(system_prompt, user_prompt)
@@ -876,7 +890,6 @@ ensure_momentum_column()
 ensure_trust_column()
 ensure_thread_link_table()
 ensure_pronoun_table()
-ensure_dna_table()
 
 
 @app.route("/user/pronouns", methods=["GET"])

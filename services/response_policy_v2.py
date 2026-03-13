@@ -174,13 +174,18 @@ def _select_mode(
     presence_mode: str, policy_mode: str, message_len: int, trust: float,
 ) -> str:
 
-    # Presence holding → silent
-    if presence_mode == "holding" or policy_mode == "listen_only":
+    # Intent help → KHÔNG được silent, phải guide ngay
+    if intent == "help":
+        return "deep_mirror"   # strategy engine sẽ override thành guide
+
+    # Presence holding + user KHÔNG xin giúp → silent
+    if (presence_mode == "holding" or policy_mode == "listen_only") and intent != "help":
         return "silent_presence"
 
-    # Rất mong manh
+    # Rất mong manh + chưa xin giúp
     if distress >= 0.70 or (intensity >= 8 and emotion in _HEAVY):
-        return "silent_presence"
+        if intent != "help":
+            return "silent_presence"
 
     # Muốn khám phá / hỏi ý kiến
     if intent in ("exploration", "question", "seek_advice") and distress < 0.40:

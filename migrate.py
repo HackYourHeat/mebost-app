@@ -6,16 +6,18 @@ Chạy trước start command: python migrate.py
 Railway config:
   "preDeployCommand": "python migrate.py"
 """
-import os
-import sys
+import sys, os, time
 
+print("=" * 50)
+print("MEBOST — Pre-deploy migration")
+print("=" * 50)
+
+# Validate env vars bắt buộc trước khi migrate
 required = ["OPENROUTER_API_KEY", "SECRET_KEY"]
-
-missing = [k for k in required if not os.environ.get(k)]
-
+missing  = [k for k in required if not os.environ.get(k)]
 if missing:
     print(f"[FATAL] Missing env vars: {', '.join(missing)}")
-    print("Set these in Railway → Settings → Variables")
+    print("        Set these in Railway → Settings → Variables")
     sys.exit(1)
 
 # Check DB mode

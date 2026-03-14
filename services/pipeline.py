@@ -1,49 +1,59 @@
 """
-pipeline.py — MEBOST Hải Đăng V2 (Clean)
+pipeline.py — MEBOST Hải Đăng V2.1 (Single Authority)
 
-Thay thế 20+ engine bằng một pipeline rõ ràng, 3 tầng:
+Mục tiêu của bản này:
+- chỉ giữ MỘT authority quyết định phản hồi
+- bỏ tư duy policy chồng lên strategy
+- pipeline vẫn gọn: emotion → intent → strategy → memory → prompt → LLM
 
-  Tầng 1 — mỗi request (nhanh, blocking):
-    emotion → intent → strategy → memory_select → prompt → LLM
-
-  Tầng 2 — có điều kiện (chạy khi trigger):
-    trust    → update mỗi 10 tin nhắn
-    pronoun  → update khi user đổi cách xưng hô
-
-  Tầng 3 — background (không chặn request):
-    memory_decay → hàm riêng gọi từ cron/route admin
+Trong runtime chính:
+- authority quyết định phản hồi = select_strategy_with_reason()
+- các engine khác nếu còn tồn tại chỉ là legacy / experimental
 """
 from __future__ import annotations
-import re
 
-# ── Emotion detection ─────────────────────────────────────────────────────
+# ── Emotion detection ──────────────────────────────────────────────────────
 
 _EMOTION_MAP = {
-    "sad":     ["buồn", "khóc", "nhớ", "cô đơn", "trống", "mất mát", "tuyệt vọng",
-                "sad", "cry", "lonely", "hurt", "heartbreak", "hopeless"],
-    "anxious": ["lo", "lo lắng", "sợ", "hồi hộp", "bất an", "căng thẳng",
-                "stress", "áp lực", "worried", "anxious", "afraid", "panic"],
-    "tired":   ["mệt", "kiệt sức", "nặng nề", "uể oải", "không còn sức",
-                "tired", "exhausted", "drained", "burned out"],
-    "angry":   ["tức", "giận", "bực", "phẫn nộ", "angry", "mad", "furious", "frustrated"],
-    "happy":   ["vui", "hạnh phúc", "phấn khởi", "tuyệt", "hào hứng",
-                "happy", "joy", "excited", "proud", "wonderful"],
+    "sad": [
+        "buồn", "khóc", "nhớ", "cô đơn", "trống", "mất mát", "tuyệt vọng",
+        "sad", "cry", "lonely", "hurt", "heartbreak", "hopeless",
+    ],
+    "anxious": [
+        "lo", "lo lắng", "sợ", "hồi hộp", "bất an", "căng thẳng",
+        "stress", "áp lực", "worried", "anxious", "afraid", "panic",
+    ],
+    "tired": [
+        "mệt", "kiệt sức", "nặng nề", "uể oải", "không còn sức",
+        "tired", "exhausted", "drained", "burned out",
+    ],
+    "angry": [
+        "tức", "giận", "bực", "phẫn nộ", "angry", "mad", "furious", "frustrated",
+    ],
+    "happy": [
+        "vui", "hạnh phúc", "phấn khởi", "tuyệt", "hào hứng",
+        "happy", "joy", "excited", "proud", "wonderful",
+    ],
 }
+
 
 def detect_emotion(text: str) -> tuple[str, int]:
     lower = text.lower()
-    scores = {e: 0 for e in _EMOTION_MAP}
+    scores = {emotion: 0 for emotion in _EMOTION_MAP}
+
     for emotion, keywords in _EMOTION_MAP.items():
         for kw in keywords:
             if kw in lower:
                 scores[emotion] += 1
-    best  = max(scores, key=lambda e: scores[e])
+
+    best = max(scores, key=lambda e: scores[e])
     score = scores[best]
     if score == 0:
         return "neutral", 5
     return best, min(10, 3 + score * 2)
 
-# ── Intent detection ──────────────────────────────────────────────────────
+
+# ── Intent detection ───────────────────────────────────────────────────────
 
 _HELP_SIGNALS = [
     "khuyên tôi", "khuyên mình", "lời khuyên", "nên làm gì", "phải làm gì",
@@ -72,6 +82,7 @@ _SELF_ATTACK_SIGNALS = [
     "i'm worthless", "i'm useless", "i'm a failure", "i hate myself",
 ]
 
+
 def detect_intent(text: str) -> str:
     lower = text.lower()
     if any(s in lower for s in _FRUSTRATION_SIGNALS):
@@ -88,38 +99,63 @@ def detect_intent(text: str) -> str:
         return "question"
     return "talk"
 
-# ── Strategy selection ────────────────────────────────────────────────────
-# Đây là lõi điều khiển hành vi — đơn giản, rõ ràng, không nhiều layer
 
-def select_strategy(
-    intent:  str,
+# ── Single response authority ──────────────────────────────────────────────
+
+_STRATEGIES = {"reflect", "comfort", "guide", "engage", "reframe"}
+
+
+def select_strategy_with_reason(
+    message: str,
+    intent: str,
     emotion: str,
-    trust:   float = 0.30,
-) -> str:
+    trust: float = 0.30,
+) -> tuple[str, str]:
     """
-    Chọn strategy cho lượt này.
-    Priority rõ ràng — không phụ thuộc vào 10 signal khác nhau.
+    Authority duy nhất cho runtime chính.
+
+    Priority:
+      1. frustrated  -> engage
+      2. self_attack -> comfort / reframe
+      3. help/stuck  -> guide
+      4. vent        -> reflect
+      5. heavy emotion -> reflect
+      6. question/talk -> reflect
     """
-    if intent == "frustrated":
-        return "engage"
+    low = message.lower()
 
-    if intent == "self_attack":
-        # trust cao → có thể reframe; thấp → comfort trước
-        return "reframe" if trust >= 0.60 else "comfort"
+    if any(s in low for s in _FRUSTRATION_SIGNALS) or intent == "frustrated":
+        return "engage", "frustration with AI → engage"
 
-    if intent in ("help", "stuck"):
-        return "guide"
+    if any(s in low for s in _SELF_ATTACK_SIGNALS) or intent == "self_attack":
+        if trust >= 0.60:
+            return "reframe", f"self-attack + trust={trust:.2f} → reframe"
+        return "comfort", f"self-attack + trust={trust:.2f} → comfort"
+
+    if intent == "help":
+        return "guide", "intent=help → guide"
+
+    if intent == "stuck" or any(s in low for s in _STUCK_SIGNALS):
+        return "guide", "stuck pattern → guide"
 
     if intent == "vent":
-        return "reflect"
+        return "reflect", "intent=vent → reflect"
 
-    # Cảm xúc nặng mà chưa hỏi gì cụ thể → reflect trước
     if emotion in ("sad", "anxious", "tired", "angry"):
-        return "reflect"
+        return "reflect", f"heavy emotion={emotion} → reflect"
 
-    return "reflect"
+    if intent == "question":
+        return "reflect", "intent=question but no direct help signal → reflect first"
 
-# ── Trust (chạy conditional, mỗi 10 tin) ─────────────────────────────────
+    return "reflect", "default → reflect"
+
+
+def select_strategy(message: str, intent: str, emotion: str, trust: float = 0.30) -> str:
+    strategy, _ = select_strategy_with_reason(message, intent, emotion, trust)
+    return strategy
+
+
+# ── Trust (conditional, every N turns) ────────────────────────────────────
 
 _VULNERABILITY_SIGNALS = [
     "chưa nói với ai", "lần đầu mình kể", "mình cô đơn",
@@ -129,8 +165,8 @@ _GRATITUDE_SIGNALS = [
     "cảm ơn", "bạn hiểu mình", "thank you", "that helped",
 ]
 
+
 def compute_trust_delta(text: str, emotion_intensity: int) -> float:
-    """Trả về delta nhỏ để cộng/trừ vào trust hiện tại."""
     lower = text.lower()
     delta = 0.0
     if any(s in lower for s in _VULNERABILITY_SIGNALS):
@@ -138,28 +174,31 @@ def compute_trust_delta(text: str, emotion_intensity: int) -> float:
     if any(s in lower for s in _GRATITUDE_SIGNALS):
         delta += 0.04
     if len(text) > 200 and emotion_intensity >= 6:
-        delta += 0.03  # chia sẻ sâu
+        delta += 0.03
     if len(text) < 20:
-        delta -= 0.01  # disengagement nhẹ
+        delta -= 0.01
     return max(-0.05, min(0.10, delta))
+
 
 def load_trust(user_id: str) -> float:
     try:
         from db import get_db
-        db  = get_db()
+        db = get_db()
         row = db.execute(
-            "SELECT trust FROM user_trust WHERE user_id = ?", (user_id,)
+            "SELECT trust FROM user_trust WHERE user_id = ?",
+            (user_id,),
         ).fetchone()
         db.close()
         return float(row["trust"]) if row else 0.30
     except Exception:
         return 0.30
 
+
 def update_trust(user_id: str, delta: float) -> float:
     try:
         from db import get_db, utc_now_iso
         current = load_trust(user_id)
-        new_trust = max(0.05, min(0.95, current + delta * 0.3))  # smooth learning rate
+        new_trust = max(0.05, min(0.95, current + delta * 0.3))
         db = get_db()
         db.execute(
             """INSERT INTO user_trust (user_id, trust, updated_at)
@@ -173,28 +212,30 @@ def update_trust(user_id: str, delta: float) -> float:
     except Exception:
         return 0.30
 
-# ── Pronoun (chạy conditional, khi user đổi cách xưng) ───────────────────
+
+# ── Pronoun (conditional) ─────────────────────────────────────────────────
 
 _PRONOUN_MODES = {
-    "tớ":   ("tớ",  "cậu"),
-    "cậu":  ("tớ",  "cậu"),
-    "tôi":  ("tôi", "bạn"),
-    "con ": ("cô",  "con"),
+    "tớ": ("tớ", "cậu"),
+    "cậu": ("tớ", "cậu"),
+    "tôi": ("tôi", "bạn"),
+    "con ": ("cô", "con"),
     "cháu": ("bác", "cháu"),
 }
 
+
 def infer_pronoun(text: str) -> tuple[str, str] | None:
-    """Infer xưng hô từ cách user viết. None nếu không rõ."""
     lower = text.lower()
     for signal, pair in _PRONOUN_MODES.items():
         if signal in lower:
             return pair
     return None
 
+
 def load_pronoun(user_id: str) -> tuple[str, str]:
     try:
         from db import get_db
-        db  = get_db()
+        db = get_db()
         row = db.execute(
             "SELECT ai_pronoun, user_pronoun FROM user_pronoun_profile WHERE user_id = ?",
             (user_id,),
@@ -205,6 +246,7 @@ def load_pronoun(user_id: str) -> tuple[str, str]:
         return "mình", "bạn"
     except Exception:
         return "mình", "bạn"
+
 
 def save_pronoun(user_id: str, ai_p: str, user_p: str) -> None:
     try:
@@ -221,27 +263,22 @@ def save_pronoun(user_id: str, ai_p: str, user_p: str) -> None:
     except Exception:
         pass
 
-def resolve_pronoun(user_id: str, message: str) -> tuple[str, str]:
-    """
-    Load pronoun hiện tại. Update nếu user thay đổi cách xưng hô.
-    Chỉ infer một lần — giữ ổn định sau đó.
-    """
-    current_ai, current_user = load_pronoun(user_id)
 
-    # Chỉ re-infer nếu vẫn đang dùng default
+def resolve_pronoun(user_id: str, message: str) -> tuple[str, str]:
+    current_ai, current_user = load_pronoun(user_id)
     if current_ai == "mình" and current_user == "bạn":
         inferred = infer_pronoun(message)
         if inferred:
             save_pronoun(user_id, inferred[0], inferred[1])
             return inferred
-
     return current_ai, current_user
 
-# ── Importance score (đơn giản, không phức tạp) ───────────────────────────
+
+# ── Importance score ───────────────────────────────────────────────────────
+
 
 def score_importance(text: str, emotion_intensity: int) -> int:
-    """1–10. Dùng để sort memory_nodes, không dùng để lọc."""
-    score = 5  # baseline
+    score = 5
     lower = text.lower()
 
     high_signals = [

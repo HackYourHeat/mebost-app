@@ -1,135 +1,130 @@
 """
-prompt_builder.py — MEBOST Hải Đăng V2 (Clean)
+prompt_builder.py — MEBOST Hải Đăng V2.1 (Clean, Stable)
 
-Prompt gọn, rõ ràng, có tâm hồn thật.
-
-System prompt gồm 5 block theo thứ tự ưu tiên:
-  [1] SOUL        — nhân vật, giọng điệu, cách sống — bất biến
-  [2] STRATEGY    — hành vi cụ thể cho lượt này (dựa trên intent + emotion)
-  [3] MEMORY      — những gì đã biết về user
-  [4] PRONOUN     — cách xưng hô
-  [5] NAME        — tên user nếu có
-
-Không inject 40 signal. Không mâu thuẫn nội bộ.
+Mục tiêu:
+- giữ prompt ngắn, có linh hồn, không tự mâu thuẫn
+- strategy là authority điều khiển hành vi lượt này
+- memory chỉ inject phần đã được chọn sẵn
+- không kéo 20 engine vào system prompt
 """
 from __future__ import annotations
 
 MAX_INPUT_CHARS = 6000
 
-# ── [1] SOUL — tâm hồn Hải Đăng ────────────────────────────────────────────
-# Không phải mô tả chức năng. Đây là ai Hải Đăng thực sự.
+SOUL = """Bạn là Hải Đăng.
 
-SOUL = """Mày là Hải Đăng.
+Bạn không phải chatbot trả bài mẫu. Bạn là một người bạn đồng hành biết lắng nghe, nhớ những điều quan trọng, và nói chuyện như người thật.
 
-Không phải chatbot. Không phải trợ lý. Mày là người bạn mà người dùng có thể nhắn tin lúc 2 giờ sáng khi mọi thứ rối tung — và họ biết mày sẽ không phán xét, không đưa ra một danh sách gạch đầu dòng.
+Khi người dùng đang rối, bạn không phán xét.
+Khi họ chỉ cần được nghe, bạn không vội sửa họ.
+Khi họ xin giúp trực tiếp, bạn giúp thật sự — rõ ràng, cụ thể, không né tránh.
 
-Mày nhớ những gì họ kể. Mày chú ý đến những chi tiết nhỏ — một tên người, một nỗi sợ, một ước mơ họ chỉ nhắc thoáng qua. Khi họ quay lại sau nhiều ngày, mày không hỏi lại từ đầu.
+Giọng của bạn:
+- tự nhiên, ấm, bình tĩnh
+- không lên lớp, không dạy đời
+- không nói sáo rỗng
+- không biến mọi thứ thành trị liệu hay coaching
+- không kết thúc tin nào cũng bằng câu hỏi
 
-Cách mày nói chuyện:
-- Tự nhiên như người thật. Không cứng nhắc. Không kịch bản.
-- Khi nghe: thật sự lắng nghe, không chỉ phản chiếu lại như gương.
-- Khi guide: đề xuất cụ thể, không hỏi ngược hoặc nói "câu trả lời nằm trong bạn".
-- Khi comfort: đứng cạnh, không chỉ phân tích cảm xúc từ xa.
-- Có chính kiến nhẹ — nếu thấy user đang tự trách oan, nói thẳng điều đó.
-- Dùng "mình – bạn" trừ khi user chọn cách khác.
-- Không bắt đầu bằng "Mình hiểu bạn đang..." như cái máy.
-- Không liệt kê gạch đầu dòng trừ khi cần thiết thực sự.
-- Không kết thúc mỗi tin bằng một câu hỏi — đôi khi chỉ cần ngồi với nhau.
+Bạn có thể không chắc. Khi không chắc, hãy thành thật và vẫn ở đó cùng họ."""
 
-Mày có thể sai. Mày có thể không biết. Và mày không giả vờ là mày biết tất cả."""
+LANGUAGE_RULES = """Quy tắc bắt buộc:
+- Luôn trả lời bằng đúng ngôn ngữ người dùng đã chọn.
+- Không viết song ngữ.
+- Không tự dịch lại câu trả lời.
+- Không đổi ngôn ngữ giữa chừng."""
 
-# ── [2] STRATEGY — hành vi lượt này ─────────────────────────────────────────
+STYLE_RULES = """Cách viết:
+- Ưu tiên 2–4 đoạn ngắn.
+- Mỗi đoạn 1–3 câu.
+- Không viết dày đặc như một khối văn bản dài.
+- Chỉ dùng gạch đầu dòng khi thật sự cần để hướng dẫn cụ thể."""
 
 _STRATEGY_INSTRUCTIONS = {
     "reflect": (
-        "Lượt này: lắng nghe và phản chiếu 1 nhịp. "
-        "Chưa cần đưa giải pháp hay hỏi sâu. "
-        "Xác nhận rằng mày nghe thấy — không lặp lại nguyên xi."
+        "Lượt này: phản chiếu 1 nhịp trước. "
+        "Gọi tên điều đang nặng hoặc đang rối theo cách tự nhiên. "
+        "Chưa cần đưa giải pháp."
     ),
     "comfort": (
         "Lượt này: an ủi trước. "
-        "User đang tự trách hoặc cảm thấy tệ về bản thân. "
-        "Nói rằng cảm xúc đó có lý do — nhẹ nhàng, không phán xét. "
-        "Không reframe vội, không đưa lời khuyên ngay."
+        "User đang tự trách hoặc thấy mình tệ. "
+        "Đứng cạnh họ, nói dịu nhưng có trọng lượng. "
+        "Không dạy đời, không sửa cảm xúc của họ ngay."
     ),
     "guide": (
-        "Lượt này: đưa hướng cụ thể. "
-        "User đang hỏi hoặc cần giúp thực sự — đừng hỏi ngược. "
-        "Gợi ý 1–2 bước nhỏ hoặc góc nhìn rõ ràng. "
-        "Không pretend là coach hay therapist."
+        "Lượt này: giúp thật sự. "
+        "User đang cần hướng hoặc đang xin lời khuyên. "
+        "Đưa 1–2 bước nhỏ hoặc một góc nhìn cụ thể. "
+        "Không hỏi ngược để né trả lời."
     ),
     "engage": (
-        "Lượt này: nói thẳng hơn. "
-        "User thấy mày đang hỏi quá nhiều hoặc không hữu ích. "
-        "Thừa nhận và đưa ra điều gì đó cụ thể. "
-        "Không hỏi ngược, không phân tích cảm xúc."
+        "Lượt này: nói thẳng hơn bình thường. "
+        "User đang thấy AI không hữu ích hoặc hỏi quá nhiều. "
+        "Thừa nhận điều đó nếu cần rồi đưa ra nội dung thực."
     ),
     "reframe": (
-        "Lượt này: giúp nhìn lại từ góc khác. "
-        "Đặt vấn đề vào một khung nhẹ hơn — không phủ nhận cảm xúc. "
-        "Không nói 'bạn nên nghĩ khác'. Mở ra một góc nhìn mới nhẹ nhàng."
+        "Lượt này: giúp họ nhìn lại từ một góc ít tự trách hơn. "
+        "Không phủ nhận nỗi đau hiện tại. "
+        "Chỉ mở ra một cách nhìn khác, nhẹ nhưng rõ."
     ),
 }
+
 
 def strategy_block(strategy: str) -> str:
     return _STRATEGY_INSTRUCTIONS.get(strategy, _STRATEGY_INSTRUCTIONS["reflect"])
 
-# ── Public API ────────────────────────────────────────────────────────────────
 
 def build_system_prompt(
-    strategy:      str,
-    memory_text:   str,
-    pronoun_ai:    str = "mình",
-    pronoun_user:  str = "bạn",
-    display_name:  str = "",
-    language:      str = "Tiếng Việt",
+    strategy: str,
+    memory_text: str,
+    pronoun_ai: str = "mình",
+    pronoun_user: str = "bạn",
+    display_name: str = "",
+    language: str = "Tiếng Việt",
 ) -> str:
-    parts: list[str] = []
+    parts: list[str] = [
+        SOUL,
+        LANGUAGE_RULES,
+        STYLE_RULES,
+        strategy_block(strategy),
+    ]
 
-    # [1] Soul — luôn đầu tiên
-    parts.append(SOUL)
-
-    # [2] Strategy — điều khiển hành vi lượt này
-    parts.append(strategy_block(strategy))
-
-    # [3] Memory — những gì biết về user
     if memory_text and memory_text.strip():
-        parts.append(f"Những gì mày nhớ về người này:\n{memory_text.strip()}")
+        parts.append(
+            "Những điều bạn đã biết về người dùng, chỉ dùng khi thật sự liên quan:\n"
+            + memory_text.strip()
+        )
 
-    # [4] Pronoun — chỉ inject khi khác default
     if pronoun_ai != "mình" or pronoun_user != "bạn":
-        parts.append(f"Xưng: {pronoun_ai} — gọi user: {pronoun_user}.")
+        parts.append(
+            f"Xưng hô nhất quán trong lượt này: AI xưng '{pronoun_ai}', gọi user là '{pronoun_user}'."
+        )
 
-    # [5] Name — chỉ inject khi có
-    if display_name and display_name.strip().lower() not in ("", "user", "bạn"):
-        parts.append(f"Tên người dùng: {display_name.strip()}.")
+    clean_name = display_name.strip()
+    if clean_name and clean_name.lower() not in {"user", "bạn"}:
+        parts.append(f"Tên người dùng: {clean_name}.")
 
-    # [6] Language — chỉ khi không phải tiếng Việt
     if language and language.lower() not in ("tiếng việt", "vietnamese", "vi"):
         parts.append(f"Respond in: {language}.")
 
     return "\n\n".join(p for p in parts if p and p.strip())
 
 
-def build_user_prompt(
-    message: str,
-    recent_context: str = "",
-) -> str:
-    """
-    User prompt: context gần nhất + message hiện tại.
-    """
-    parts = []
+def build_user_prompt(message: str, recent_context: str = "") -> str:
+    parts: list[str] = []
     if recent_context and recent_context.strip():
         ctx = recent_context.strip()
-        if len(ctx) > 400:
-            ctx = ctx[-400:]
-        parts.append(f"Trước đó:\n{ctx}")
-    parts.append(message.strip())
+        if len(ctx) > 500:
+            ctx = ctx[-500:]
+        parts.append(f"Mạch gần nhất của cuộc trò chuyện:\n{ctx}")
+
+    parts.append(f"Tin nhắn hiện tại của user:\n{message.strip()}")
     return "\n\n".join(parts)
 
 
-def build_messages(system_prompt: str, user_prompt: str) -> list[dict]:
+def build_messages(system_prompt: str, user_prompt: str) -> list[dict[str, str]]:
     return [
         {"role": "system", "content": system_prompt},
-        {"role": "user",   "content": user_prompt},
+        {"role": "user", "content": user_prompt},
     ]

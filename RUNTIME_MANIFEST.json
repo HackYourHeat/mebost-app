@@ -1,0 +1,68 @@
+{
+  "version": "v4-production-clean",
+  "runtime_authority": {
+    "entrypoint": "app.py",
+    "decision_engine": "pipeline.py",
+    "prompt_builder": "prompt_builder.py",
+    "memory_runtime": [
+      "memory_engine.py",
+      "memory_selector.py"
+    ],
+    "trace_engine": "turn_trace_engine.py"
+  },
+  "allowed_runtime_files": [
+    "app.py",
+    "db.py",
+    "llm_adapter.py",
+    "logging_engine.py",
+    "rate_limit_engine.py",
+    "user_service.py",
+    "pipeline.py",
+    "prompt_builder.py",
+    "memory_engine.py",
+    "memory_selector.py",
+    "turn_trace_engine.py"
+  ],
+  "legacy_candidates": [
+    "response_policy.py",
+    "response_policy_v2.py",
+    "prompt_builder_backup.py",
+    "pronoun_engine.py",
+    "trust_engine.py",
+    "user_state_engine.py",
+    "internal_state_service.py",
+    "presence_engine.py",
+    "relational_continuity_engine.py",
+    "temporal_self_engine.py",
+    "familiarity_engine.py",
+    "adaptive_tone_engine.py",
+    "adaptive_personality_engine.py",
+    "personality_dna_engine.py",
+    "biological_engine.py",
+    "consciousness_engine.py",
+    "conversation_gravity_engine.py",
+    "conversation_state_engine.py",
+    "feedback_engine.py",
+    "analytics_engine.py",
+    "soul_dashboard.py",
+    "memory_summary_engine.py",
+    "memory_threading_engine.py",
+    "memory_decay_engine.py",
+    "memory_extraction_engine.py",
+    "life_graph_engine.py",
+    "listening_style_service.py",
+    "memory_control_engine.py",
+    "pattern_learning_engine.py",
+    "momentum_engine.py"
+  ],
+  "temporary_compat_shims": [
+    "response_strategy_engine.py"
+  ],
+  "rules": [
+    "app.py must not import from legacy_candidates",
+    "Only pipeline.py decides strategy in main flow",
+    "Only prompt_builder.py builds production prompt",
+    "Only memory_engine.py and memory_selector.py participate in production memory runtime",
+    "Every runtime decision should be visible through turn_trace_engine.py"
+  ]
+}

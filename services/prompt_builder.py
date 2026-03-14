@@ -1,265 +1,134 @@
-# --------------------------------------------------
-# Prompt Builder — MEBOST Hải Đăng V3.3
-# --------------------------------------------------
-# Target: ~300–400 tokens total (với memory)
-#
-# Block order:
-#   [1] CORE_IDENTITY         — ~200t, bất biến
-#   [2] Language              — ~10t
-#   [3] Response strategy     — ~25t, điều khiển thật sự
-#   [4] Mirror mode           — ~30t, nhường đường nếu strategy là guide/engage
-#   [5] Anti-loop rules       — ~30t, luôn inject
-#   [6] Presence + DNA        — ~20t, compact
-#   [7] Pronoun               — ~10t
-#   [8] Display name          — ~5t
-#   [9] Memory                — ~60t max
-#   [10] Open loops           — ~15t max
-#   [11] Life graph           — ~15t max
-# --------------------------------------------------
+"""
+prompt_builder.py — MEBOST Hải Đăng V2 (Clean)
 
+Prompt gọn, rõ ràng, có tâm hồn thật.
+
+System prompt gồm 5 block theo thứ tự ưu tiên:
+  [1] SOUL        — nhân vật, giọng điệu, cách sống — bất biến
+  [2] STRATEGY    — hành vi cụ thể cho lượt này (dựa trên intent + emotion)
+  [3] MEMORY      — những gì đã biết về user
+  [4] PRONOUN     — cách xưng hô
+  [5] NAME        — tên user nếu có
+
+Không inject 40 signal. Không mâu thuẫn nội bộ.
+"""
 from __future__ import annotations
 
-MAX_INPUT_CHARS = 5000
+MAX_INPUT_CHARS = 6000
 
-from services.response_policy_v2 import (
-    CORE_IDENTITY,
-    build_mirror_prompt_block,
-)
+# ── [1] SOUL — tâm hồn Hải Đăng ────────────────────────────────────────────
+# Không phải mô tả chức năng. Đây là ai Hải Đăng thực sự.
 
-# Anti-loop rules — luôn inject, ~30 tokens
-_ANTI_LOOP = (
-    "Không phản chiếu lặp quá 1–2 nhịp. "
-    "Nếu strategy không phải reflect: tuyệt đối không mirror lại cảm xúc user. "
-    "Nếu user xin giúp trực tiếp: đưa góc nhìn hoặc bước nhỏ cụ thể. "
-    "Không chỉ hỏi ngược khi user đang tìm hướng. "
-    "Không lặp lại cảm xúc của user như máy. "
-    "Không mở đầu bằng 'Mình hiểu bạn đang...' trừ khi strategy là reflect."
-)
+SOUL = """Mày là Hải Đăng.
 
+Không phải chatbot. Không phải trợ lý. Mày là người bạn mà người dùng có thể nhắn tin lúc 2 giờ sáng khi mọi thứ rối tung — và họ biết mày sẽ không phán xét, không đưa ra một danh sách gạch đầu dòng.
+
+Mày nhớ những gì họ kể. Mày chú ý đến những chi tiết nhỏ — một tên người, một nỗi sợ, một ước mơ họ chỉ nhắc thoáng qua. Khi họ quay lại sau nhiều ngày, mày không hỏi lại từ đầu.
+
+Cách mày nói chuyện:
+- Tự nhiên như người thật. Không cứng nhắc. Không kịch bản.
+- Khi nghe: thật sự lắng nghe, không chỉ phản chiếu lại như gương.
+- Khi guide: đề xuất cụ thể, không hỏi ngược hoặc nói "câu trả lời nằm trong bạn".
+- Khi comfort: đứng cạnh, không chỉ phân tích cảm xúc từ xa.
+- Có chính kiến nhẹ — nếu thấy user đang tự trách oan, nói thẳng điều đó.
+- Dùng "mình – bạn" trừ khi user chọn cách khác.
+- Không bắt đầu bằng "Mình hiểu bạn đang..." như cái máy.
+- Không liệt kê gạch đầu dòng trừ khi cần thiết thực sự.
+- Không kết thúc mỗi tin bằng một câu hỏi — đôi khi chỉ cần ngồi với nhau.
+
+Mày có thể sai. Mày có thể không biết. Và mày không giả vờ là mày biết tất cả."""
+
+# ── [2] STRATEGY — hành vi lượt này ─────────────────────────────────────────
+
+_STRATEGY_INSTRUCTIONS = {
+    "reflect": (
+        "Lượt này: lắng nghe và phản chiếu 1 nhịp. "
+        "Chưa cần đưa giải pháp hay hỏi sâu. "
+        "Xác nhận rằng mày nghe thấy — không lặp lại nguyên xi."
+    ),
+    "comfort": (
+        "Lượt này: an ủi trước. "
+        "User đang tự trách hoặc cảm thấy tệ về bản thân. "
+        "Nói rằng cảm xúc đó có lý do — nhẹ nhàng, không phán xét. "
+        "Không reframe vội, không đưa lời khuyên ngay."
+    ),
+    "guide": (
+        "Lượt này: đưa hướng cụ thể. "
+        "User đang hỏi hoặc cần giúp thực sự — đừng hỏi ngược. "
+        "Gợi ý 1–2 bước nhỏ hoặc góc nhìn rõ ràng. "
+        "Không pretend là coach hay therapist."
+    ),
+    "engage": (
+        "Lượt này: nói thẳng hơn. "
+        "User thấy mày đang hỏi quá nhiều hoặc không hữu ích. "
+        "Thừa nhận và đưa ra điều gì đó cụ thể. "
+        "Không hỏi ngược, không phân tích cảm xúc."
+    ),
+    "reframe": (
+        "Lượt này: giúp nhìn lại từ góc khác. "
+        "Đặt vấn đề vào một khung nhẹ hơn — không phủ nhận cảm xúc. "
+        "Không nói 'bạn nên nghĩ khác'. Mở ra một góc nhìn mới nhẹ nhàng."
+    ),
+}
+
+def strategy_block(strategy: str) -> str:
+    return _STRATEGY_INSTRUCTIONS.get(strategy, _STRATEGY_INSTRUCTIONS["reflect"])
+
+# ── Public API ────────────────────────────────────────────────────────────────
 
 def build_system_prompt(
-    language:          str,
-    display_name:      str,
-    memory_summary:    str,
-    policy:            dict,
-    bio_state:         dict,
-    conscious_state:   dict,
-    life_graph_summary,
-    expressive_state:  dict,
-    message_len:       int   = 0,
-    listening_style:   str   = "gentle_companion",
-    tone_profile:      dict | None = None,
-    user_state:        dict | None = None,
-    personality:       dict | None = None,
-    conversation_turn: int   = 1,
-    momentum:          float = 0.0,
-    trust:             float = 0.30,
-    temporal_ctx:      dict | None = None,
-    gravity:           float = 0.0,
-    gravity_hook:      str   = "",
-    echo_text:         str   = "",
-    echo_strength:     float = 0.0,
-    distress:          float = 0.0,
-    pressure:          float = 0.0,
-    thread_context:    str   = "",
-    pronoun_profile:   dict | None = None,
-    relational_ctx:    dict | None = None,
-    personality_dna:   dict | None = None,
-    familiarity:       dict | None = None,
-    presence:          dict | None = None,
-    mirror_policy:     dict | None = None,
-    emotion_ctx:       dict | None = None,
-    intent_ctx:        dict | None = None,
-    strategy_hint:     str   = "",     # từ response_strategy_engine
-    conv_state_block:  str   = "",     # từ conversation_state_engine
+    strategy:      str,
+    memory_text:   str,
+    pronoun_ai:    str = "mình",
+    pronoun_user:  str = "bạn",
+    display_name:  str = "",
+    language:      str = "Tiếng Việt",
 ) -> str:
-
     parts: list[str] = []
 
-    # ── [1] Core identity ─────────────────────────
-    parts.append(CORE_IDENTITY)
+    # [1] Soul — luôn đầu tiên
+    parts.append(SOUL)
 
-    # ── [2] Language ──────────────────────────────
+    # [2] Strategy — điều khiển hành vi lượt này
+    parts.append(strategy_block(strategy))
+
+    # [3] Memory — những gì biết về user
+    if memory_text and memory_text.strip():
+        parts.append(f"Những gì mày nhớ về người này:\n{memory_text.strip()}")
+
+    # [4] Pronoun — chỉ inject khi khác default
+    if pronoun_ai != "mình" or pronoun_user != "bạn":
+        parts.append(f"Xưng: {pronoun_ai} — gọi user: {pronoun_user}.")
+
+    # [5] Name — chỉ inject khi có
+    if display_name and display_name.strip().lower() not in ("", "user", "bạn"):
+        parts.append(f"Tên người dùng: {display_name.strip()}.")
+
+    # [6] Language — chỉ khi không phải tiếng Việt
     if language and language.lower() not in ("tiếng việt", "vietnamese", "vi"):
-        parts.append(f"Respond in: {language}")
-
-    # ── [3] Response strategy (ưu tiên cao nhất) ─
-    # Đây là chỉ dẫn điều khiển hành vi lượt này.
-    # Nếu strategy là guide/engage → overrides mirror tendency.
-    if strategy_hint:
-        parts.append(strategy_hint)
-
-    # ── [3b] Conversational RAM state ────────────────
-    if conv_state_block:
-        parts.append(conv_state_block)
-
-    # ── [4] Mirror mode ───────────────────────────
-    # Compute nếu chưa có
-    if mirror_policy is None:
-        from services.response_policy_v2 import compute_mirror_policy
-        mirror_policy = compute_mirror_policy(
-            emotion_ctx    = emotion_ctx    or {},
-            intent_ctx     = intent_ctx     or {},
-            internal_state = user_state     or {},
-            presence       = presence       or {},
-            policy         = policy         or {},
-            message_len    = message_len,
-            trust          = trust,
-            momentum       = momentum,
-        )
-
-    # Chỉ inject mirror block nếu strategy KHÔNG phải guide/engage
-    # (tránh mirror block mâu thuẫn với strategy)
-    strategy_type = _extract_strategy(strategy_hint)
-    # Mirror block CHỈ inject khi strategy == reflect.
-    # guide / engage / comfort / reframe đều override mirror hoàn toàn.
-    if strategy_type == "reflect":
-        mirror_block = build_mirror_prompt_block(mirror_policy)
-        if mirror_block:
-            parts.append(mirror_block)
-
-    # ── [5] Anti-loop rules ───────────────────────
-    parts.append(_ANTI_LOOP)
-
-    # ── [6] Presence + DNA compact ────────────────
-    _presence_mode = (presence or {}).get("presence_mode", "steady")
-    presence_hints = {
-        "quiet":   "Hiện diện nhẹ nhàng — không đẩy, không kéo.",
-        "close":   "Gần gũi và ấm hơn bình thường.",
-        "holding": "Giữ chỗ — user đang mong manh. Ưu tiên an toàn.",
-        "steady":  None,
-    }
-    if presence_hints.get(_presence_mode):
-        parts.append(presence_hints[_presence_mode])
-
-    # Personality DNA — compact
-    if personality_dna:
-        empathy  = personality_dna.get("empathy",   0.5)
-        guidance = personality_dna.get("guidance",  0.5)
-        if guidance > 0.55:
-            parts.append("User phản hồi tốt với định hướng cụ thể — ưu tiên guide hơn câu hỏi.")
-        elif empathy > 0.75:
-            parts.append("User cần được cảm nhận trước — phản chiếu ấm trước khi suggest.")
-
-    # Listening style compact
-    _STYLE_HINTS = {
-        "gentle_companion":  "Giọng ấm, nhịp chậm, không dồn dập.",
-        "active_listener":   "Phản chiếu tích cực, xác nhận cảm xúc.",
-        "direct_support":    "Rõ ràng, thực dụng, ít vòng vo.",
-        "exploratory":       "Mở câu hỏi không gian — nhưng tối đa 1.",
-    }
-    style_hint = _STYLE_HINTS.get(listening_style or "gentle_companion")
-    if style_hint:
-        parts.append(style_hint)
-
-    # ── [7] Pronoun ───────────────────────────────
-    if pronoun_profile:
-        ai_p   = pronoun_profile.get("ai_pronoun",   "mình")
-        user_p = pronoun_profile.get("user_pronoun", "bạn")
-        if ai_p != "mình" or user_p != "bạn":
-            parts.append(f"Xưng: {ai_p} — gọi user: {user_p}.")
-
-    # ── [8] Display name ──────────────────────────
-    if display_name and display_name.lower() not in ("user", "bạn", ""):
-        parts.append(f"Tên người dùng: {display_name}.")
-
-    # ── [9] Memory — compact, max ~60 tokens ──────
-    if memory_summary and len(memory_summary.strip()) > 10:
-        mem = memory_summary.strip()
-        if len(mem) > 240:
-            mem = mem[:237] + "..."
-        parts.append(f"Ký ức về user:\n{mem}")
-
-    # ── [10] Open loops ───────────────────────────
-    if relational_ctx:
-        loops = relational_ctx.get("open_loops", [])
-        if loops:
-            loop_text = "; ".join(loops[:2])
-            parts.append(f"Chủ đề còn bỏ ngỏ: {loop_text}")
-
-    # ── [11] Life graph ───────────────────────────
-    if life_graph_summary:
-        lg = life_graph_summary
-        if isinstance(lg, dict):
-            themes = lg.get("themes") or lg.get("key_points") or []
-            if themes:
-                t = "; ".join(str(x) for x in themes[:3])
-                parts.append(f"Chủ đề cuộc đời: {t}")
-        elif isinstance(lg, str) and len(lg.strip()) > 10:
-            parts.append(f"Chủ đề cuộc đời: {lg.strip()[:120]}")
+        parts.append(f"Respond in: {language}.")
 
     return "\n\n".join(p for p in parts if p and p.strip())
 
 
-def _extract_strategy(hint: str) -> str:
-    """Lấy strategy type từ hint string."""
-    hint_lower = hint.lower()
-    for s in ("guide", "engage", "comfort", "reframe", "reflect"):
-        if s in hint_lower:
-            return s
-    return "reflect"
-
-
-# --------------------------------------------------
-# User prompt — compact nhưng có context
-# --------------------------------------------------
-
 def build_user_prompt(
-    language: str,
-    message:  str,
-    context,          # str (từ get_recent_context) hoặc list[dict]
-    hints:    str = "",
+    message: str,
+    recent_context: str = "",
 ) -> str:
     """
-    User prompt gọn: context gần nhất + hints + message.
-    context có thể là str (formatted) hoặc list[dict].
+    User prompt: context gần nhất + message hiện tại.
     """
     parts = []
-
-    # Recent context
-    if context:
-        if isinstance(context, str) and context.strip():
-            # Trim nếu quá dài
-            ctx = context.strip()
-            if len(ctx) > 300:
-                ctx = ctx[-300:]
-            parts.append(f"Trước đó:\n{ctx}")
-        elif isinstance(context, list):
-            recent = context[-2:] if len(context) >= 2 else context
-            ctx_lines = []
-            for turn in recent:
-                if not isinstance(turn, dict):
-                    continue
-                role = turn.get("role", "")
-                text = (turn.get("content") or "").strip()
-                if role and text:
-                    label = "User" if role == "user" else "Hải Đăng"
-                    if len(text) > 100:
-                        text = text[:97] + "..."
-                    ctx_lines.append(f"{label}: {text}")
-            if ctx_lines:
-                parts.append("Trước đó:\n" + "\n".join(ctx_lines))
-
-    # Hints compact — 1 dòng có ý nghĩa
-    if hints:
-        first_hint = next((l.strip() for l in hints.split("\n") if l.strip()), "")
-        if first_hint and len(first_hint) < 120:
-            parts.append(f"[{first_hint}]")
-
-    # Current message
+    if recent_context and recent_context.strip():
+        ctx = recent_context.strip()
+        if len(ctx) > 400:
+            ctx = ctx[-400:]
+        parts.append(f"Trước đó:\n{ctx}")
     parts.append(message.strip())
-
     return "\n\n".join(parts)
 
 
-# --------------------------------------------------
-# Messages payload
-# --------------------------------------------------
-
-def build_messages_payload(
-    system_prompt: str,
-    user_prompt:   str,
-) -> list[dict]:
+def build_messages(system_prompt: str, user_prompt: str) -> list[dict]:
     return [
         {"role": "system", "content": system_prompt},
         {"role": "user",   "content": user_prompt},

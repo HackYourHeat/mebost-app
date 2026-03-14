@@ -1,190 +1,149 @@
+"""
+memory_engine.py — MEBOST Hải Đăng V2 (Clean)
+
+Nguyên tắc mới:
+- Lưu MỌI tin nhắn thực sự của user (không lọc theo score)
+- Chỉ bỏ qua những phản hồi đơn lẻ vô nghĩa (ok, haha, 👍)
+- Dedup chỉ khi text GIỐNG HỆT — không merge substring
+- select_memory() chọn thông minh khi inject vào prompt
+"""
+from __future__ import annotations
+import re
 from db import get_db, utc_now_iso
 
-# --------------------------------------------------
-# Constants
-# --------------------------------------------------
+MAX_MEMORY_TEXT   = 400   # ký tự tối đa mỗi node
+MEMORY_FETCH_LIMIT = 60   # số node fetch để selector chọn
 
-MEMORY_THRESHOLD     = 7
-DEFAULT_CONFIDENCE   = 0.85
-MAX_MEMORY_TEXT_CHARS = 300
-SIMILAR_LOOKUP_LIMIT = 20
+# ── Noise filter — chỉ những thứ thực sự trống rỗng ──────────────────────
 
-# --------------------------------------------------
-# Signal sets for classify_memory_type
-# --------------------------------------------------
+_NOISE_PATTERNS = [
+    r"^ok[\s!.]*$", r"^okay[\s!.]*$", r"^haha[\s!.]*$", r"^hi[\s!.]*$",
+    r"^hello[\s!.]*$", r"^chào[\s!.]*$", r"^xin chào[\s!.]*$",
+    r"^test[\s!.]*$", r"^cảm ơn[\s!.]*$", r"^thanks?[\s!.]*$",
+    r"^thx[\s!.]*$", r"^ừ[\s!.]*$", r"^uh[\s!.]*$", r"^vâng[\s!.]*$",
+    r"^đúng[\s!.]*$", r"^yeah[\s!.]*$", r"^yes[\s!.]*$", r"^no[\s!.]*$",
+    r"^không[\s!.]*$", r"^k[\s!.]*$", r"^dc[\s!.]*$", r"^được[\s!.]*$",
+    r"^👍+$", r"^😊+$", r"^\.\.\.*$",
+]
+_NOISE_RE = [re.compile(p, re.I) for p in _NOISE_PATTERNS]
+
+def is_noise(text: str) -> bool:
+    s = text.strip()
+    if len(s) < 3:
+        return True
+    for pattern in _NOISE_RE:
+        if pattern.match(s):
+            return True
+    return False
+
+# ── Memory type classification ─────────────────────────────────────────────
 
 _TYPE_RULES: list[tuple[list[str], str]] = [
-    (["tên mình là", "my name is", "gọi mình là", "call me"],                          "identity"),
-    (["thích", "prefer", "preference", "không thích", "do not like"],                  "preference"),
-    (["mục tiêu", "goal", "muốn build", "want to build",
-      "muốn trở thành", "want to become"],                                              "goal"),
-    (["người yêu", "relationship", "bạn thân", "partner"],                             "relationship"),
-    (["lo", "sợ", "anxious", "worried", "mệt", "buồn"],                               "emotional_pattern"),
-    (["đừng", "không thích bị", "boundary"],                                           "boundary"),
-    (["đang", "currently", "thất nghiệp", "unemployed", "gia đình", "family"],         "life_context"),
+    (["tên mình là", "my name is", "gọi mình là", "call me", "mình tên", "tôi tên"], "identity"),
+    (["thích", "prefer", "yêu thích", "không thích", "do not like", "ghét"],          "preference"),
+    (["mục tiêu", "goal", "muốn build", "muốn trở thành", "want to become",
+      "ước mơ", "dream", "kế hoạch", "plan"],                                          "goal"),
+    (["người yêu", "bạn gái", "bạn trai", "vợ", "chồng", "relationship",
+      "bạn thân", "gia đình", "family", "bố", "mẹ", "anh", "chị", "em"],             "relationship"),
+    (["lo", "sợ", "anxious", "worried", "mệt", "buồn", "tức", "angry",
+      "cô đơn", "alone", "stress", "nặng lòng", "kiệt sức"],                         "emotional"),
+    (["đừng", "không thích bị", "boundary", "please don't", "tôi không muốn"],        "boundary"),
+    (["công việc", "nghề", "career", "job", "thất nghiệp", "unemployed",
+      "học", "trường", "school", "dự án", "project"],                                 "life_context"),
 ]
+_FALLBACK_TYPE = "general"
 
-_FALLBACK_TYPE = "life_context"
-
-
-# --------------------------------------------------
-# 1. classify_memory_type
-# --------------------------------------------------
-
-def classify_memory_type(text: str) -> str:
-    """Phân loại memory type dựa trên keyword matching."""
+def classify_type(text: str) -> str:
     lower = text.lower()
-    for keywords, memory_type in _TYPE_RULES:
+    for keywords, mtype in _TYPE_RULES:
         if any(kw in lower for kw in keywords):
-            return memory_type
+            return mtype
     return _FALLBACK_TYPE
 
+# ── Core save ──────────────────────────────────────────────────────────────
 
-# --------------------------------------------------
-# 2. build_memory_text
-# --------------------------------------------------
-
-def build_memory_text(text: str) -> str:
-    """Strip và cắt memory text về tối đa MAX_MEMORY_TEXT_CHARS ký tự."""
-    cleaned = text.strip()
-    return cleaned[:MAX_MEMORY_TEXT_CHARS]
-
-
-# --------------------------------------------------
-# 3. similar_memory_exists
-# --------------------------------------------------
-
-def similar_memory_exists(user_id: str, memory_type: str, memory_text: str) -> dict | None:
-    """
-    Kiểm tra xem user đã có memory tương tự chưa.
-    Dùng substring matching đơn giản.
-
-    Returns:
-        dict(row) nếu tìm thấy, None nếu không.
-    """
-    conn = get_db()
-    rows = conn.execute(
-        """SELECT *
-           FROM memory_nodes
-           WHERE user_id     = ?
-             AND memory_type = ?
-             AND deleted_flag = 0
-           ORDER BY id DESC
-           LIMIT ?""",
-        (user_id, memory_type, SIMILAR_LOOKUP_LIMIT),
-    ).fetchall()
-    conn.close()
-
-    new = memory_text.lower()
-    for row in rows:
-        old = (row["memory_text"] or "").lower()
-        if old == new or old in new or new in old:
-            return dict(row)
-
-    return None
-
-
-# --------------------------------------------------
-# 4. update existing node
-# --------------------------------------------------
-
-def _update_memory_node(node_id: int, memory_text: str, importance_score: int) -> None:
-    """Overwrite existing memory node với dữ liệu mới."""
-    now  = utc_now_iso()
-    conn = get_db()
-    conn.execute(
-        """UPDATE memory_nodes
-           SET memory_text      = ?,
-               importance_score = ?,
-               confidence_score = ?,
-               status           = 'active',
-               updated_at       = ?,
-               last_used_at     = ?
-           WHERE id = ?""",
-        (memory_text, importance_score, DEFAULT_CONFIDENCE, now, now, node_id),
-    )
-    conn.commit()
-    conn.close()
-
-
-# --------------------------------------------------
-# 5. create new node
-# --------------------------------------------------
-
-def _create_memory_node(
-    user_id: str,
-    memory_type: str,
-    memory_text: str,
-    source_message_id: int,
-    importance_score: int,
-) -> None:
-    """Insert memory node mới vào DB + gán vào life thread."""
-    now  = utc_now_iso()
-    conn = get_db()
-    cur  = conn.execute(
-        """INSERT INTO memory_nodes
-           (user_id, memory_type, memory_text, source_message_id,
-            importance_score, confidence_score, status,
-            created_at, updated_at, last_used_at, deleted_flag)
-           VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, 0)""",
-        (user_id, memory_type, memory_text, source_message_id,
-         importance_score, DEFAULT_CONFIDENCE, now, now, now),
-    )
-    node_id = cur.lastrowid
-    conn.commit()
-    conn.close()
-    # Threading (V2.2)
-    try:
-        from services.memory_threading_engine import assign_node_to_thread
-        assign_node_to_thread(user_id, node_id, memory_text, importance_score)
-    except Exception:
-        pass
-
-
-# --------------------------------------------------
-# 6. mark message as saved
-# --------------------------------------------------
-
-def _mark_message_saved(source_message_id: int) -> None:
-    """Đánh dấu message đã được lưu vào memory."""
-    conn = get_db()
-    conn.execute(
-        "UPDATE messages SET memory_saved = 1 WHERE id = ?",
-        (source_message_id,),
-    )
-    conn.commit()
-    conn.close()
-
-
-# --------------------------------------------------
-# 7. Public API
-# --------------------------------------------------
-
-def save_memory_node(
+def save_message_to_memory(
     user_id: str,
     source_message_id: int,
     text: str,
     importance_score: int,
 ) -> bool:
     """
-    Pipeline chính: quyết định create/update memory node.
-
-    Returns:
-        True  — nếu đã save hoặc update memory
-        False — nếu không đủ điều kiện
+    Lưu mọi tin nhắn thực sự của user vào memory_nodes.
+    Chỉ bỏ qua noise thực sự (ok, haha, ...).
+    Dedup chỉ khi text giống hệt nhau.
     """
-    if importance_score < MEMORY_THRESHOLD:
+    text = text.strip()
+    if is_noise(text):
         return False
 
-    memory_type = classify_memory_type(text)
-    memory_text = build_memory_text(text)
+    memory_type = classify_type(text)
+    memory_text = text[:MAX_MEMORY_TEXT]
+    now = utc_now_iso()
 
-    existing = similar_memory_exists(user_id, memory_type, memory_text)
+    conn = get_db()
+
+    # Chỉ dedup exact match — không merge substring
+    existing = conn.execute(
+        """SELECT id FROM memory_nodes
+           WHERE user_id = ? AND memory_text = ? AND deleted_flag = 0
+           LIMIT 1""",
+        (user_id, memory_text),
+    ).fetchone()
 
     if existing:
-        _update_memory_node(existing["id"], memory_text, importance_score)
+        conn.execute(
+            "UPDATE memory_nodes SET last_used_at = ?, updated_at = ? WHERE id = ?",
+            (now, now, existing["id"]),
+        )
     else:
-        _create_memory_node(user_id, memory_type, memory_text, source_message_id, importance_score)
+        conn.execute(
+            """INSERT INTO memory_nodes
+               (user_id, memory_type, memory_text, source_message_id,
+                importance_score, status, created_at, updated_at, last_used_at, deleted_flag)
+               VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, 0)""",
+            (user_id, memory_type, memory_text, source_message_id,
+             importance_score, now, now, now),
+        )
 
-    _mark_message_saved(source_message_id)
+    conn.execute(
+        "UPDATE messages SET memory_saved = 1 WHERE id = ?",
+        (source_message_id,),
+    )
+    conn.commit()
+    conn.close()
     return True
+
+# ── Fetch for selector ─────────────────────────────────────────────────────
+
+def get_memory_nodes(user_id: str, limit: int = MEMORY_FETCH_LIMIT) -> list[dict]:
+    """Lấy memory nodes active, ưu tiên quan trọng và mới nhất."""
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT * FROM memory_nodes
+           WHERE user_id = ? AND deleted_flag = 0 AND status = 'active'
+           ORDER BY importance_score DESC, updated_at DESC
+           LIMIT ?""",
+        (user_id, limit),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_memory_enabled(user_id: str) -> bool:
+    conn = get_db()
+    row = conn.execute(
+        "SELECT memory_enabled FROM users WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    conn.close()
+    return bool(row["memory_enabled"]) if row else True
+
+def clear_memory(user_id: str) -> int:
+    """Xóa mềm toàn bộ memory của user."""
+    conn = get_db()
+    cur = conn.execute(
+        "UPDATE memory_nodes SET deleted_flag = 1 WHERE user_id = ?", (user_id,)
+    )
+    count = cur.rowcount
+    conn.commit()
+    conn.close()
+    return count
